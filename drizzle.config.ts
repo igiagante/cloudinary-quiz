@@ -7,8 +7,8 @@ config({
 });
 
 export default defineConfig({
-  schema: "./src/lib/db/schema.ts",
-  out: "./src/lib/db/migrations",
+  schema: "./lib/db/schema.ts",
+  out: "./lib/db/migrations",
   driver: "pg",
   dbCredentials: {
     connectionString: process.env.POSTGRES_URL!,

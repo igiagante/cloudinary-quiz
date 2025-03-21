@@ -19,14 +19,19 @@ export default function Home() {
   const [dbStats, setDbStats] = useState<{ totalQuestions: number } | null>(
     null
   );
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const questions = await questionRepository.getAll();
-        setDbStats({ totalQuestions: questions.length });
+        const response = await fetch("/api/stats");
+        if (!response.ok) {
+          throw new Error("Failed to fetch stats");
+        }
+        const data = await response.json();
+        setDbStats({ totalQuestions: data.totalQuestions });
       } catch (error) {
-        console.error("Error fetching questions:", error);
+        console.error("Error fetching stats:", error);
         setDbStats({ totalQuestions: 0 });
       }
     };
@@ -41,45 +46,80 @@ export default function Home() {
     }
   };
 
+  const handleSliderChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = Number(e.target.value);
+    setNumQuestions(value);
+  };
+
   const handleStartQuiz = async () => {
+    if (isLoading) return;
     setIsLoading(true);
+    setError(null);
 
     try {
-      // Generate quiz questions from the database
+      // First, create an anonymous user if one doesn't exist
+      let userId = localStorage.getItem("userId");
+      if (!userId) {
+        const userResponse = await fetch("/api/users/anonymous", {
+          method: "POST",
+        });
+        if (!userResponse.ok) {
+          throw new Error("Failed to create anonymous user");
+        }
+        const userData = await userResponse.json();
+        userId = userData.userId;
+        if (!userId) {
+          throw new Error("No user ID returned from server");
+        }
+        localStorage.setItem("userId", userId);
+      }
+
+      const payload = {
+        numQuestions,
+        topics: selectedTopics.length > 0 ? selectedTopics : undefined,
+        difficulty: difficulty === "mixed" ? undefined : difficulty,
+      };
+
       const response = await fetch("/api/generate-questions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          numQuestions,
-          topics: selectedTopics.length > 0 ? selectedTopics : undefined,
-          difficulty: difficulty === "mixed" ? undefined : difficulty,
-        }),
+        body: JSON.stringify(payload),
       });
-
-      if (!response.ok) {
-        throw new Error("Failed to generate quiz");
-      }
 
       const data = await response.json();
 
-      // Store quiz state in the database or session
-      // For now, we'll keep using localStorage until we set up the quiz session table
-      localStorage.setItem(
-        "quizState",
-        JSON.stringify({
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to generate quiz");
+      }
+
+      if (!data.questions || data.questions.length === 0) {
+        throw new Error("No questions were generated");
+      }
+
+      try {
+        const quizState = {
           questions: data.questions,
           currentQuestionIndex: 0,
           userAnswers: {},
           isComplete: false,
-        })
-      );
+        };
+        localStorage.setItem("quizState", JSON.stringify(quizState));
+        console.log("Quiz state saved successfully:", quizState);
+      } catch (storageError) {
+        console.error("Failed to save quiz state:", storageError);
+        throw new Error(
+          "Failed to save quiz state. Please check browser storage settings."
+        );
+      }
 
-      // Navigate to quiz page
       router.push("/quiz");
     } catch (error) {
       console.error("Error starting quiz:", error);
+      setError(
+        error instanceof Error ? error.message : "Failed to generate quiz"
+      );
     } finally {
       setIsLoading(false);
     }
@@ -87,6 +127,11 @@ export default function Home() {
 
   return (
     <main className="container mx-auto px-4 py-8 max-w-3xl">
+      {error && (
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
+          <p className="text-red-700">{error}</p>
+        </div>
+      )}
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold mb-2">
           Cloudinary Certification Quiz
@@ -115,7 +160,7 @@ export default function Home() {
             max="30"
             step="5"
             value={numQuestions}
-            onChange={(e) => setNumQuestions(Number(e.target.value))}
+            onChange={handleSliderChange}
             className="w-full"
           />
           <div className="flex justify-between text-sm text-gray-500">

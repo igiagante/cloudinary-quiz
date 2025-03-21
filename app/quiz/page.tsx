@@ -5,7 +5,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import QuizCard from "@/components/quiz-card";
 import QuizProgress from "@/components/quiz-progress";
-import { QuizQuestion, QuizState } from "@/types";
+import { QuizState } from "@/types";
 
 export default function QuizPage() {
   const router = useRouter();
@@ -22,48 +22,23 @@ export default function QuizPage() {
   const currentQuestion = quizState.questions[quizState.currentQuestionIndex];
 
   useEffect(() => {
-    const fetchQuestions = async () => {
-      try {
-        // Get quiz configuration from localStorage
-        const configStr = localStorage.getItem("quizConfig");
-        if (!configStr) {
-          throw new Error("No quiz configuration found");
-        }
-
-        const config = JSON.parse(configStr);
-
-        // Fetch questions from API
-        const response = await fetch("/api/generate-questions", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(config),
-        });
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch questions");
-        }
-
-        const data = await response.json();
-
-        setQuizState({
-          questions: data.questions,
-          currentQuestionIndex: 0,
-          userAnswers: {},
-          isComplete: false,
-        });
-      } catch (err) {
-        console.error("Error fetching questions:", err);
-        setError(
-          err instanceof Error ? err.message : "An unknown error occurred"
-        );
-      } finally {
-        setIsLoading(false);
+    try {
+      // Get existing quiz state from localStorage
+      const quizStateStr = localStorage.getItem("quizState");
+      if (!quizStateStr) {
+        throw new Error("No quiz state found");
       }
-    };
 
-    fetchQuestions();
+      const savedQuizState = JSON.parse(quizStateStr);
+      setQuizState(savedQuizState);
+      setIsLoading(false);
+    } catch (err) {
+      console.error("Error loading quiz state:", err);
+      setError(
+        err instanceof Error ? err.message : "An unknown error occurred"
+      );
+      setIsLoading(false);
+    }
   }, []);
 
   const handleAnswer = (questionId: string, answer: string) => {

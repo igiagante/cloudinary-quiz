@@ -4,9 +4,8 @@
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import ResultsSummary from "@/components/results-summary";
-import { QuizQuestion, QuizResults, TopicPerformance } from "@/types";
+import { QuizQuestion, QuizResults, TopicPerformance, Topic } from "@/types";
 import AdminLink from "@/components/admin-link";
-import { analyzeQuizResults } from "@/lib/quiz-generator";
 
 export default function ResultsPage() {
   const router = useRouter();
@@ -15,10 +14,17 @@ export default function ResultsPage() {
   const [error, setError] = useState<string | null>(null);
   const [wrongQuestions, setWrongQuestions] = useState<QuizQuestion[]>([]);
 
+  let isGenerating = false;
+
   useEffect(() => {
     const generateResults = async () => {
+      if (isGenerating) {
+        console.log("[Debug] Already generating results, skipping");
+        return;
+      }
+
+      isGenerating = true;
       try {
-        // Get quiz state from localStorage
         const quizStateStr = localStorage.getItem("quizState");
         if (!quizStateStr) {
           throw new Error("No quiz data found");
@@ -40,28 +46,45 @@ export default function ResultsPage() {
           );
         }
 
-        // Generate results
-        const analysisResults = analyzeQuizResults(allQuestions, userAnswers);
+        // Instead of calling both APIs, we should only call generate-report
+        // since it already includes the analysis
+        const reportResponse = await fetch("/api/generate-report", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            questions: allQuestions,
+            userAnswers: userAnswers,
+            userId: localStorage.getItem("userId"),
+          }),
+        });
+
+        if (!reportResponse.ok) {
+          throw new Error("Failed to generate report");
+        }
+
+        const { results } = await reportResponse.json();
 
         // Format results for UI
         const topicBreakdown: TopicPerformance[] = Object.entries(
-          analysisResults.topicPerformance
+          results.topicPerformance
         )
-          .filter(([_, data]) => data.total > 0)
+          .filter(([_, data]) => (data as any).total > 0)
           .map(([topic, data]) => ({
-            topic: topic as any,
-            correct: data.correct,
-            total: data.total,
-            percentage: data.percentage,
+            topic: topic as Topic,
+            correct: (data as any).correct,
+            total: (data as any).total,
+            percentage: (data as any).percentage,
           }))
-          .sort((a, b) => b.percentage - a.percentage); // Sort by percentage descending
+          .sort((a, b) => b.percentage - a.percentage);
 
         const formattedResults: QuizResults = {
-          score: analysisResults.score,
-          passed: analysisResults.passed,
+          score: results.score,
+          passed: results.passed,
           topicBreakdown,
-          improvementAreas: analysisResults.improvementAreas,
-          strengths: analysisResults.strengths,
+          improvementAreas: results.improvementAreas,
+          strengths: results.strengths,
         };
 
         setResults(formattedResults);
@@ -79,6 +102,7 @@ export default function ResultsPage() {
         );
       } finally {
         setIsLoading(false);
+        isGenerating = false;
       }
     };
 

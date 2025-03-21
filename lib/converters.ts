@@ -10,11 +10,19 @@ import { QuizQuestion, QuizResults, TopicPerformance } from "@/types";
  * Convert a database QuestionWithOptions to a frontend QuizQuestion
  */
 export function toQuizQuestion(dbQuestion: QuestionWithOptions): QuizQuestion {
+  // Create a copy of options and shuffle them
+  const shuffledOptions = [...dbQuestion.options]
+    .sort(() => Math.random() - 0.5)
+    .map((opt) => opt.text);
+
+  const correctAnswer =
+    dbQuestion.options.find((opt) => opt.isCorrect)?.text || "";
+
   return {
     id: dbQuestion.uuid,
     question: dbQuestion.question,
-    options: dbQuestion.options.map((opt) => opt.text),
-    correctAnswer: dbQuestion.options.find((opt) => opt.isCorrect)?.text || "",
+    options: shuffledOptions,
+    correctAnswer: correctAnswer,
     explanation: dbQuestion.explanation,
     topic: dbQuestion.topic as any,
     difficulty: dbQuestion.difficulty as any,

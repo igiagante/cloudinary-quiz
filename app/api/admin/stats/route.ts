@@ -5,16 +5,24 @@ import { quizRepository } from "@/lib/db/repositories/quiz.repository";
 
 export async function GET(request: NextRequest) {
   try {
-    // Get question statistics
-    const questionStats = await questionRepository.getStats();
+    const { searchParams } = new URL(request.url);
+    const quizId = searchParams.get("id");
+    const userId = searchParams.get("userId");
 
-    // Get quiz statistics
-    const quizStats = await quizRepository.getQuizStatistics();
+    if (quizId) {
+      // Get a specific quiz
+      const quiz = await quizRepository.getByUuid(quizId);
+    } else if (userId) {
+      // Get quiz history for a user
+      const quizHistory = await quizRepository.getQuizHistory(userId);
+      const quizStats = await quizRepository.getQuizStats(userId);
 
-    return NextResponse.json({
-      questions: questionStats,
-      quizzes: quizStats,
-    });
+      return NextResponse.json({
+        quizzes: quizStats,
+      });
+    }
+
+    return NextResponse.json({ error: "User ID is required" }, { status: 400 });
   } catch (error) {
     console.error("Error fetching admin statistics:", error);
     return NextResponse.json(

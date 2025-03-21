@@ -3,10 +3,17 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "db:push": "drizzle-kit push:pg",
+    "db:pull": "drizzle-kit pull",
+    "db:check": "drizzle-kit check:pg",
+    "db:up": "drizzle-kit up",
+    "db:generate": "drizzle-kit generate:pg",
+    "db:migrate": "npx tsx lib/db/migrate.ts",
+    "db:seed": "npx tsx lib/db/seed.ts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.1.2",

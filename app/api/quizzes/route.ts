@@ -15,8 +15,18 @@ const createQuizSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userId, numQuestions, topics, difficulty } =
-      createQuizSchema.parse(body);
+    const {
+      userId: userIdStr,
+      numQuestions,
+      topics,
+      difficulty,
+    } = createQuizSchema.parse(body);
+
+    // Convert userId from string to number if present
+    const userId = userIdStr ? parseInt(userIdStr, 10) : undefined;
+    if (userIdStr && isNaN(userId!)) {
+      return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
+    }
 
     // Get questions from the database
     let questions;
@@ -49,7 +59,7 @@ export async function POST(request: NextRequest) {
     // Create a new quiz with the selected questions
     const questionIds = questions.map((q) => q.id);
     const quizId = await quizRepository.create({
-      userId,
+      userId: userIdStr,
       numQuestions,
       questionIds,
     });
@@ -84,9 +94,10 @@ export async function GET(request: NextRequest) {
       const quizHistory = await quizRepository.getQuizHistory(userId);
       return NextResponse.json({ quizHistory });
     } else {
-      // Get quiz statistics
-      const stats = await quizRepository.getQuizStatistics();
-      return NextResponse.json({ stats });
+      return NextResponse.json(
+        { error: "User ID is required" },
+        { status: 400 }
+      );
     }
   } catch (error) {
     console.error("Error fetching quiz data:", error);

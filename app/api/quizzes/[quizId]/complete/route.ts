@@ -8,11 +8,19 @@ export async function POST(
 ) {
   try {
     const { quizId } = await params;
+    const body = await request.json();
+    const { score, topicPerformance } = body;
+
+    // Get quiz by UUID to get its numeric ID
+    const quiz = await quizRepository.getByUuid(quizId);
+    if (!quiz) {
+      return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
+    }
 
     // Complete the quiz and calculate results
-    const results = await quizRepository.completeQuiz(quizId);
+    await quizRepository.completeQuiz(quiz.id, score, topicPerformance);
 
-    return NextResponse.json({ results });
+    return NextResponse.json({ success: true });
   } catch (error) {
     console.error("Error completing quiz:", error);
     return NextResponse.json(

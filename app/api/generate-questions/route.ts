@@ -31,6 +31,7 @@ const generateQuestionsSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
     const { numQuestions, topics, difficulty } =
       generateQuestionsSchema.parse(body);
 
@@ -38,20 +39,28 @@ export async function POST(request: NextRequest) {
     const selectedTopics = topics || [];
     let dbQuestions = [];
 
-    if (selectedTopics.length > 0) {
-      // Get questions matching the specified topics and difficulty
-      dbQuestions = await questionRepository.getByTopicAndDifficulty(
-        selectedTopics,
-        difficulty,
-        numQuestions
-      );
-    } else {
-      // Get random questions
-      const allTopics = CLOUDINARY_TOPIC_LIST;
-      dbQuestions = await questionRepository.getByTopicAndDifficulty(
-        allTopics,
-        difficulty,
-        numQuestions
+    try {
+      if (selectedTopics.length > 0) {
+        // Get questions matching the specified topics and difficulty
+        dbQuestions = await questionRepository.getByTopicAndDifficulty(
+          selectedTopics,
+          difficulty,
+          numQuestions
+        );
+      } else {
+        // Get random questions
+        const allTopics = CLOUDINARY_TOPIC_LIST;
+        dbQuestions = await questionRepository.getByTopicAndDifficulty(
+          allTopics,
+          difficulty,
+          numQuestions
+        );
+      }
+    } catch (dbError) {
+      console.error("Database error:", dbError);
+      return NextResponse.json(
+        { error: "Database error: " + (dbError as Error).message },
+        { status: 500 }
       );
     }
 

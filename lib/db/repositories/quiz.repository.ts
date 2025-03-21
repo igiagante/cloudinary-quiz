@@ -1,5 +1,5 @@
 // db/repositories/quizRepository.ts
-import { eq, and, desc, sql, count } from "drizzle-orm";
+import { eq, and, desc, sql, count, inArray } from "drizzle-orm";
 import { db } from "../index";
 import {
   quizzes,
@@ -36,7 +36,7 @@ export type QuizWithQuestions = {
 };
 
 export type NewQuizInput = {
-  userId?: string;
+  userId?: string | null;
   numQuestions: number;
   questionIds: number[];
 };
@@ -65,55 +65,28 @@ export const quizRepository = {
   /**
    * Create a new quiz with selected questions
    */
-  async create(input: NewQuizInput): Promise<string> {
-    return await db.transaction(async (tx) => {
-      // Create the quiz
-      const [quizResult] = await tx
-        .insert(quizzes)
-        .values({
-          uuid: uuidv4(),
-          userId: input.userId,
-          numQuestions: input.numQuestions,
-          isCompleted: false,
-          passPercentage: 80, // Default passing score
-          createdAt: new Date(),
-        })
-        .returning();
+  async create(input: NewQuizInput): Promise<QuizWithQuestions> {
+    const quizUuid = uuidv4();
+    const now = new Date();
 
-      // Add questions to the quiz
-      const quizQuestionsToInsert = input.questionIds.map((questionId) => ({
-        quizId: quizResult.id,
+    const [quiz] = await db
+      .insert(quizzes)
+      .values({
+        uuid: quizUuid,
+        userId: input.userId || null,
+        createdAt: now,
+        numQuestions: input.numQuestions,
+        passPercentage: 70,
+      })
+      .returning();
+
+    await db.insert(quizQuestions).values(
+      input.questionIds.map((questionId) => ({
+        quizId: quiz.id,
         questionId,
         createdAt: new Date(),
-      }));
-
-      await tx.insert(quizQuestions).values(quizQuestionsToInsert);
-
-      return quizResult.uuid;
-    });
-  },
-
-  /**
-   * Get a quiz by UUID with all its questions and answers
-   */
-  async getByUuid(uuid: string): Promise<QuizWithQuestions | null> {
-    const quiz = await db.query.quizzes.findFirst({
-      where: eq(quizzes.uuid, uuid),
-      with: {
-        quizQuestions: {
-          with: {
-            question: {
-              with: {
-                options: true,
-              },
-            },
-          },
-        },
-        topicPerformance: true,
-      },
-    });
-
-    if (!quiz) return null;
+      }))
+    );
 
     return {
       id: quiz.id,
@@ -125,30 +98,80 @@ export const quizRepository = {
       passPercentage: quiz.passPercentage,
       createdAt: quiz.createdAt,
       completedAt: quiz.completedAt || undefined,
-      questions: quiz.quizQuestions.map((qq) => ({
-        questionId: qq.questionId,
+      questions: [],
+      topicPerformance: [],
+    };
+  },
+
+  /**
+   * Get a quiz by UUID with all its questions and answers
+   */
+  async getByUuid(uuid: string): Promise<QuizWithQuestions | null> {
+    const quiz = await db
+      .select()
+      .from(quizzes)
+      .where(eq(quizzes.uuid, uuid))
+      .limit(1)
+      .then((rows) => rows[0] || null);
+
+    if (!quiz) {
+      return null;
+    }
+
+    const quizQuestionsList = await db
+      .select({
+        questionId: quizQuestions.questionId,
         question: {
-          id: qq.question.id,
-          uuid: qq.question.uuid,
-          question: qq.question.question,
-          explanation: qq.question.explanation,
-          topic: qq.question.topic,
-          difficulty: qq.question.difficulty,
-          options: qq.question.options.map((o) => ({
+          id: questions.id,
+          uuid: questions.uuid,
+          question: questions.question,
+          explanation: questions.explanation,
+          topic: questions.topic,
+          difficulty: questions.difficulty,
+        },
+        userAnswer: quizQuestions.userAnswer,
+        isCorrect: quizQuestions.isCorrect,
+      })
+      .from(quizQuestions)
+      .innerJoin(questions, eq(questions.id, quizQuestions.questionId))
+      .where(eq(quizQuestions.quizId, quiz.id));
+
+    // Get options for each question
+    const questionIds = quizQuestionsList.map((q) => q.question.id);
+    const questionOptions = await db
+      .select()
+      .from(options)
+      .where(inArray(options.questionId, questionIds));
+
+    // Combine questions with their options
+    const questionsWithOptions = quizQuestionsList.map((q) => ({
+      questionId: q.questionId,
+      question: {
+        ...q.question,
+        options: questionOptions
+          .filter((o) => o.questionId === q.question.id)
+          .map((o) => ({
             id: o.id,
             text: o.text,
             isCorrect: o.isCorrect,
           })),
-        },
-        userAnswer: qq.userAnswer || undefined,
-        isCorrect: qq.isCorrect !== null ? qq.isCorrect : undefined,
-      })),
-      topicPerformance: quiz.topicPerformance.map((tp) => ({
-        topic: tp.topic,
-        correct: tp.correct,
-        total: tp.total,
-        percentage: tp.percentage,
-      })),
+      },
+      userAnswer: q.userAnswer || undefined,
+      isCorrect: q.isCorrect || undefined,
+    }));
+
+    return {
+      id: quiz.id,
+      uuid: quiz.uuid,
+      userId: quiz.userId || undefined,
+      numQuestions: quiz.numQuestions,
+      isCompleted: quiz.isCompleted,
+      score: quiz.score || undefined,
+      passPercentage: quiz.passPercentage,
+      createdAt: quiz.createdAt,
+      completedAt: quiz.completedAt || undefined,
+      questions: questionsWithOptions,
+      topicPerformance: [],
     };
   },
 
@@ -197,107 +220,38 @@ export const quizRepository = {
   /**
    * Complete a quiz and calculate results
    */
-  async completeQuiz(quizId: string): Promise<QuizCompletionResult> {
-    return await db.transaction(async (tx) => {
-      // Get the quiz with questions and answers
-      const quiz = await tx.query.quizzes.findFirst({
-        where: eq(quizzes.uuid, quizId),
-        with: {
-          quizQuestions: {
-            with: {
-              question: true,
-            },
-          },
-        },
-      });
-
-      if (!quiz) {
-        throw new Error("Quiz not found");
-      }
-
-      if (quiz.isCompleted) {
-        throw new Error("Quiz already completed");
-      }
-
-      // Check if all questions have been answered
-      const unansweredQuestions = quiz.quizQuestions.filter(
-        (q) => q.userAnswer === null
-      );
-      if (unansweredQuestions.length > 0) {
-        throw new Error(
-          `${unansweredQuestions.length} questions are still unanswered`
-        );
-      }
-
-      // Calculate score
-      const totalQuestions = quiz.quizQuestions.length;
-      const correctAnswers = quiz.quizQuestions.filter(
-        (q) => q.isCorrect
-      ).length;
-      const scorePercentage = Math.round(
-        (correctAnswers / totalQuestions) * 100
-      );
-      const passed = scorePercentage >= quiz.passPercentage;
-
-      // Calculate topic performance
-      const topicResults: Record<string, { correct: number; total: number }> =
-        {};
-
-      for (const quizQuestion of quiz.quizQuestions) {
-        const topic = quizQuestion.question.topic;
-
-        if (!topicResults[topic]) {
-          topicResults[topic] = { correct: 0, total: 0 };
-        }
-
-        topicResults[topic].total += 1;
-        if (quizQuestion.isCorrect) {
-          topicResults[topic].correct += 1;
-        }
-      }
-
-      const topicPerformanceData = Object.entries(topicResults).map(
-        ([topic, data]) => {
-          const percentage = Math.round((data.correct / data.total) * 100);
-          return {
-            topic,
-            correct: data.correct,
-            total: data.total,
-            percentage,
-          };
-        }
-      );
-
-      // Update the quiz as completed
+  async completeQuiz(
+    quizId: number,
+    score: number,
+    topicPerformanceData: Array<{
+      topic: string;
+      correct: number;
+      total: number;
+      percentage: number;
+    }>
+  ): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Update quiz completion status and score
       await tx
         .update(quizzes)
         .set({
           isCompleted: true,
-          score: scorePercentage,
+          score,
           completedAt: new Date(),
         })
-        .where(eq(quizzes.id, quiz.id));
+        .where(eq(quizzes.id, quizId));
 
-      // Save topic performance
-      const topicPerformanceToInsert = topicPerformanceData.map((tp) => ({
-        quizId: quiz.id,
-        topic: tp.topic as any,
-        correct: tp.correct,
-        total: tp.total,
-        percentage: tp.percentage,
-        createdAt: new Date(),
-      }));
-
-      await tx.insert(topicPerformance).values(topicPerformanceToInsert);
-
-      return {
-        quizId,
-        totalQuestions,
-        correctAnswers,
-        score: scorePercentage,
-        passed,
-        topicPerformance: topicPerformanceData,
-      };
+      // Insert topic performance records
+      await tx.insert(topicPerformance).values(
+        topicPerformanceData.map((tp) => ({
+          quizId,
+          topic: tp.topic as any, // Cast to match the enum type
+          correct: tp.correct,
+          total: tp.total,
+          percentage: tp.percentage,
+          createdAt: new Date(),
+        }))
+      );
     });
   },
 
@@ -350,51 +304,228 @@ export const quizRepository = {
   /**
    * Get quiz statistics
    */
-  async getQuizStatistics(): Promise<{
+  async getQuizStats(userId: string): Promise<{
     totalQuizzes: number;
     completedQuizzes: number;
-    averageScore: number;
-    passRate: number;
+    averageScore: number | null;
+    passRate: number | null;
   }> {
-    // Total quizzes
-    const [totalResult] = await db.select({ count: count() }).from(quizzes);
-    const totalQuizzes = Number(totalResult.count);
-
-    // Completed quizzes
-    const [completedResult] = await db
-      .select({ count: count() })
-      .from(quizzes)
-      .where(eq(quizzes.isCompleted, true));
-    const completedQuizzes = Number(completedResult.count);
-
-    // Average score
-    const [avgScoreResult] = await db
+    const [result] = await db
       .select({
-        avg: sql`AVG(${quizzes.score})`,
+        totalQuizzes: count(),
+        completedQuizzes: count(quizzes.completedAt),
+        averageScore: sql<
+          number | null
+        >`AVG(CASE WHEN ${quizzes.completedAt} IS NOT NULL THEN ${quizzes.score} END)`,
+        passRate: sql<
+          number | null
+        >`AVG(CASE WHEN ${quizzes.completedAt} IS NOT NULL THEN CASE WHEN ${quizzes.score} >= ${quizzes.passPercentage} THEN 100 ELSE 0 END END)`,
       })
       .from(quizzes)
-      .where(eq(quizzes.isCompleted, true));
-    const averageScore = Number(avgScoreResult.avg) || 0;
-
-    // Pass rate
-    const [passCountResult] = await db
-      .select({ count: count() })
-      .from(quizzes)
-      .where(
-        and(
-          eq(quizzes.isCompleted, true),
-          sql`${quizzes.score} >= ${quizzes.passPercentage}`
-        )
-      );
-    const passCount = Number(passCountResult.count);
-    const passRate =
-      completedQuizzes > 0 ? (passCount / completedQuizzes) * 100 : 0;
+      .where(eq(quizzes.userId, userId));
 
     return {
-      totalQuizzes,
-      completedQuizzes,
-      averageScore,
-      passRate,
+      totalQuizzes: Number(result.totalQuizzes),
+      completedQuizzes: Number(result.completedQuizzes),
+      averageScore: result.averageScore,
+      passRate: result.passRate,
     };
+  },
+
+  /**
+   * Get a quiz by ID with all its questions and answers
+   */
+  async getById(id: number): Promise<QuizWithQuestions | null> {
+    const quiz = await db
+      .select()
+      .from(quizzes)
+      .where(eq(quizzes.id, id))
+      .limit(1)
+      .then((rows) => rows[0] || null);
+
+    if (!quiz) {
+      return null;
+    }
+
+    const quizQuestionsList = await db
+      .select({
+        questionId: quizQuestions.questionId,
+        question: {
+          id: questions.id,
+          uuid: questions.uuid,
+          question: questions.question,
+          explanation: questions.explanation,
+          topic: questions.topic,
+          difficulty: questions.difficulty,
+        },
+        userAnswer: quizQuestions.userAnswer,
+        isCorrect: quizQuestions.isCorrect,
+      })
+      .from(quizQuestions)
+      .innerJoin(questions, eq(questions.id, quizQuestions.questionId))
+      .where(eq(quizQuestions.quizId, id));
+
+    // Get options for each question
+    const questionIds = quizQuestionsList.map((q) => q.question.id);
+    const questionOptions = await db
+      .select()
+      .from(options)
+      .where(inArray(options.questionId, questionIds));
+
+    // Combine questions with their options
+    const questionsWithOptions = quizQuestionsList.map((q) => ({
+      questionId: q.questionId,
+      question: {
+        ...q.question,
+        options: questionOptions
+          .filter((o) => o.questionId === q.question.id)
+          .map((o) => ({
+            id: o.id,
+            text: o.text,
+            isCorrect: o.isCorrect,
+          })),
+      },
+      userAnswer: q.userAnswer || undefined,
+      isCorrect: q.isCorrect || undefined,
+    }));
+
+    return {
+      id: quiz.id,
+      uuid: quiz.uuid,
+      userId: quiz.userId || undefined,
+      numQuestions: quiz.numQuestions,
+      isCompleted: quiz.isCompleted,
+      score: quiz.score || undefined,
+      passPercentage: quiz.passPercentage,
+      createdAt: quiz.createdAt,
+      completedAt: quiz.completedAt || undefined,
+      questions: questionsWithOptions,
+      topicPerformance: [],
+    };
+  },
+
+  async updateQuizAnswer(
+    quizId: number,
+    questionId: number,
+    userAnswer: number,
+    isCorrect: boolean
+  ): Promise<void> {
+    await db
+      .update(quizQuestions)
+      .set({
+        userAnswer,
+        isCorrect,
+      })
+      .where(
+        and(
+          eq(quizQuestions.quizId, quizId),
+          eq(quizQuestions.questionId, questionId)
+        )
+      );
+  },
+
+  async getTopicPerformance(userId: string): Promise<
+    Array<{
+      topic: string;
+      correct: number;
+      total: number;
+      percentage: number;
+    }>
+  > {
+    const result = await db
+      .select({
+        topic: topicPerformance.topic,
+        correct: sql<number>`SUM(${topicPerformance.correct})`,
+        total: sql<number>`SUM(${topicPerformance.total})`,
+        percentage: sql<number>`ROUND(AVG(${topicPerformance.percentage}))`,
+      })
+      .from(topicPerformance)
+      .innerJoin(quizzes, eq(quizzes.id, topicPerformance.quizId))
+      .where(eq(quizzes.userId, userId))
+      .groupBy(topicPerformance.topic);
+
+    return result.map((tp) => ({
+      topic: tp.topic,
+      correct: Number(tp.correct),
+      total: Number(tp.total),
+      percentage: Number(tp.percentage),
+    }));
+  },
+
+  async getQuizzesByTopic(
+    userId: string,
+    topic: string
+  ): Promise<
+    Array<{
+      uuid: string;
+      createdAt: Date;
+      completedAt?: Date;
+      score?: number;
+      passed?: boolean;
+    }>
+  > {
+    const result = await db
+      .select({
+        uuid: quizzes.uuid,
+        createdAt: quizzes.createdAt,
+        completedAt: quizzes.completedAt,
+        score: quizzes.score,
+        passPercentage: quizzes.passPercentage,
+      })
+      .from(quizzes)
+      .innerJoin(quizQuestions, eq(quizzes.id, quizQuestions.quizId))
+      .innerJoin(questions, eq(quizQuestions.questionId, questions.id))
+      .where(and(eq(quizzes.userId, userId), eq(questions.topic, topic as any)))
+      .orderBy(desc(quizzes.createdAt));
+
+    return result.map((quiz) => ({
+      uuid: quiz.uuid,
+      createdAt: quiz.createdAt,
+      completedAt: quiz.completedAt || undefined,
+      score: quiz.score || undefined,
+      passed:
+        quiz.score !== null ? quiz.score >= quiz.passPercentage : undefined,
+    }));
+  },
+
+  async getQuizzesByDifficulty(
+    userId: string,
+    difficulty: string
+  ): Promise<
+    Array<{
+      uuid: string;
+      createdAt: Date;
+      completedAt?: Date;
+      score?: number;
+      passed?: boolean;
+    }>
+  > {
+    const result = await db
+      .select({
+        uuid: quizzes.uuid,
+        createdAt: quizzes.createdAt,
+        completedAt: quizzes.completedAt,
+        score: quizzes.score,
+        passPercentage: quizzes.passPercentage,
+      })
+      .from(quizzes)
+      .innerJoin(quizQuestions, eq(quizzes.id, quizQuestions.quizId))
+      .innerJoin(questions, eq(quizQuestions.questionId, questions.id))
+      .where(
+        and(
+          eq(quizzes.userId, userId),
+          eq(questions.difficulty, difficulty as any)
+        )
+      )
+      .orderBy(desc(quizzes.createdAt));
+
+    return result.map((quiz) => ({
+      uuid: quiz.uuid,
+      createdAt: quiz.createdAt,
+      completedAt: quiz.completedAt || undefined,
+      score: quiz.score || undefined,
+      passed:
+        quiz.score !== null ? quiz.score >= quiz.passPercentage : undefined,
+    }));
   },
 };

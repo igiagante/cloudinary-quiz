@@ -1,4 +1,5 @@
-// db/schema.ts
+// db/schema.ts - Adding user schema and connecting it with quizzes
+
 import {
   pgTable,
   serial,
@@ -8,10 +9,11 @@ import {
   timestamp,
   boolean,
   pgEnum,
+  uuid,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
-// Enums
+// Existing enums
 export const topicEnum = pgEnum("topic", [
   "Cloudinary Basics",
   "Image Optimization",
@@ -27,7 +29,19 @@ export const topicEnum = pgEnum("topic", [
 
 export const difficultyEnum = pgEnum("difficulty", ["easy", "medium", "hard"]);
 
-// Questions table
+// New user table
+export const users = pgTable("users", {
+  id: text("id").primaryKey().notNull(),
+  uuid: varchar("uuid", { length: 36 }).notNull().unique(),
+  email: varchar("email", { length: 255 }).unique(), // Optional for anonymous users
+  name: varchar("name", { length: 255 }),
+  avatarUrl: text("avatar_url"),
+  isAnonymous: boolean("is_anonymous").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastLoginAt: timestamp("last_login_at").defaultNow().notNull(),
+});
+
+// Questions table (existing)
 export const questions = pgTable("questions", {
   id: serial("id").primaryKey(),
   uuid: varchar("uuid", { length: 36 }).notNull().unique(),
@@ -39,7 +53,7 @@ export const questions = pgTable("questions", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// Options table
+// Options table (existing)
 export const options = pgTable("options", {
   id: serial("id").primaryKey(),
   questionId: integer("question_id")
@@ -50,11 +64,11 @@ export const options = pgTable("options", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Quizzes table
+// Update quizzes table to reference user
 export const quizzes = pgTable("quizzes", {
   id: serial("id").primaryKey(),
   uuid: varchar("uuid", { length: 36 }).notNull().unique(),
-  userId: varchar("user_id", { length: 255 }),
+  userId: text("user_id").references(() => users.id), // Can be null for anonymous quizzes
   numQuestions: integer("num_questions").notNull(),
   isCompleted: boolean("is_completed").default(false).notNull(),
   score: integer("score"),
@@ -63,21 +77,20 @@ export const quizzes = pgTable("quizzes", {
   completedAt: timestamp("completed_at"),
 });
 
-// QuizQuestions join table
+// Existing tables
 export const quizQuestions = pgTable("quiz_questions", {
   id: serial("id").primaryKey(),
   quizId: integer("quiz_id")
-    .references(() => quizzes.id, { onDelete: "cascade" })
+    .references(() => quizzes.id)
     .notNull(),
   questionId: integer("question_id")
-    .references(() => questions.id, { onDelete: "cascade" })
+    .references(() => questions.id)
     .notNull(),
   userAnswer: integer("user_answer").references(() => options.id),
   isCorrect: boolean("is_correct"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Topic Performance table for analytics
 export const topicPerformance = pgTable("topic_performance", {
   id: serial("id").primaryKey(),
   quizId: integer("quiz_id")
@@ -90,7 +103,26 @@ export const topicPerformance = pgTable("topic_performance", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// User-specific performance tracking over time
+export const userTopicPerformance = pgTable("user_topic_performance", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id")
+    .references(() => users.id, { onDelete: "cascade" })
+    .notNull(),
+  topic: topicEnum("topic").notNull(),
+  totalQuizzes: integer("total_quizzes").notNull(),
+  totalQuestions: integer("total_questions").notNull(),
+  correctAnswers: integer("correct_answers").notNull(),
+  percentage: integer("percentage").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Relations
+export const usersRelations = relations(users, ({ many }) => ({
+  quizzes: many(quizzes),
+  topicPerformance: many(userTopicPerformance),
+}));
+
 export const questionsRelations = relations(questions, ({ many }) => ({
   options: many(options),
   quizQuestions: many(quizQuestions),
@@ -103,7 +135,11 @@ export const optionsRelations = relations(options, ({ one }) => ({
   }),
 }));
 
-export const quizzesRelations = relations(quizzes, ({ many }) => ({
+export const quizzesRelations = relations(quizzes, ({ one, many }) => ({
+  user: one(users, {
+    fields: [quizzes.userId],
+    references: [users.id],
+  }),
   quizQuestions: many(quizQuestions),
   topicPerformance: many(topicPerformance),
 }));
@@ -129,7 +165,20 @@ export const topicPerformanceRelations = relations(
   })
 );
 
+export const userTopicPerformanceRelations = relations(
+  userTopicPerformance,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [userTopicPerformance.userId],
+      references: [users.id],
+    }),
+  })
+);
+
 // Types
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+
 export type Question = typeof questions.$inferSelect;
 export type NewQuestion = typeof questions.$inferInsert;
 
@@ -144,3 +193,6 @@ export type NewQuizQuestion = typeof quizQuestions.$inferInsert;
 
 export type TopicPerformance = typeof topicPerformance.$inferSelect;
 export type NewTopicPerformance = typeof topicPerformance.$inferInsert;
+
+export type UserTopicPerformance = typeof userTopicPerformance.$inferSelect;
+export type NewUserTopicPerformance = typeof userTopicPerformance.$inferInsert;
