@@ -1,5 +1,5 @@
 // db/repositories/userRepository.ts
-import { eq, and, desc, sql, count } from "drizzle-orm";
+import { eq, and, desc, sql, count, inArray } from "drizzle-orm";
 import { db } from "../index";
 import {
   users,
@@ -174,67 +174,79 @@ export const userRepository = {
         .from(topicPerformance)
         .where(eq(topicPerformance.quizId, quizId));
 
-      if (!quizTopicStats.length) {
-        return;
+      if (!quizTopicStats.length) return;
+
+      // Prepare all updates/inserts in arrays
+      const updates: any[] = [];
+      const inserts: any[] = [];
+
+      // Get all existing stats in one query
+      const existingStats = await tx
+        .select()
+        .from(userTopicPerformance)
+        .where(
+          and(
+            eq(userTopicPerformance.userId, userId),
+            inArray(
+              userTopicPerformance.topic,
+              quizTopicStats.map((stat) => stat.topic)
+            )
+          )
+        );
+
+      // Create a lookup map for existing stats
+      const existingStatsMap = new Map(
+        existingStats.map((stat) => [stat.topic, stat])
+      );
+
+      // Process all topics at once
+      for (const topicStat of quizTopicStats) {
+        const existing = existingStatsMap.get(topicStat.topic);
+
+        if (existing) {
+          updates.push({
+            id: existing.id,
+            totalQuizzes: existing.totalQuizzes + 1,
+            totalQuestions: existing.totalQuestions + topicStat.total,
+            correctAnswers: existing.correctAnswers + topicStat.correct,
+            percentage: Math.round(
+              ((existing.correctAnswers + topicStat.correct) /
+                (existing.totalQuestions + topicStat.total)) *
+                100
+            ),
+            updatedAt: new Date(),
+          });
+        } else {
+          inserts.push({
+            userId,
+            topic: topicStat.topic,
+            totalQuizzes: 1,
+            totalQuestions: topicStat.total,
+            correctAnswers: topicStat.correct,
+            percentage: topicStat.percentage,
+            updatedAt: new Date(),
+          });
+        }
       }
 
-      const userExists = await tx
-        .select({ id: users.id })
-        .from(users)
-        .where(eq(users.id, userId))
-        .limit(1);
-
-      if (!userExists.length) {
-        throw new Error(`User not found with ID: ${userId}`);
-      }
-
-      await tx.transaction(async (tx) => {
-        for (const topicStat of quizTopicStats) {
-          const existingStats = await tx
-            .select()
-            .from(userTopicPerformance)
-            .where(
-              and(
-                eq(userTopicPerformance.userId, userId),
-                eq(userTopicPerformance.topic, topicStat.topic)
+      // Perform all updates and inserts in parallel
+      await Promise.all([
+        updates.length > 0
+          ? Promise.all(
+              updates.map((update) =>
+                tx
+                  .update(userTopicPerformance)
+                  .set(update)
+                  .where(eq(userTopicPerformance.id, update.id))
               )
             )
-            .limit(1);
-
-          if (existingStats.length > 0) {
-            const currentStats = existingStats[0];
-            const newStats = {
-              totalQuizzes: currentStats.totalQuizzes + 1,
-              totalQuestions: currentStats.totalQuestions + topicStat.total,
-              correctAnswers: currentStats.correctAnswers + topicStat.correct,
-              percentage: Math.round(
-                ((currentStats.correctAnswers + topicStat.correct) /
-                  (currentStats.totalQuestions + topicStat.total)) *
-                  100
-              ),
-              updatedAt: new Date(),
-            };
-
-            await tx
-              .update(userTopicPerformance)
-              .set(newStats)
-              .where(eq(userTopicPerformance.id, currentStats.id));
-          } else {
-            const newStats = {
-              userId,
-              topic: topicStat.topic,
-              totalQuizzes: 1,
-              totalQuestions: topicStat.total,
-              correctAnswers: topicStat.correct,
-              percentage: topicStat.percentage,
-              updatedAt: new Date(),
-            };
-
-            await tx.insert(userTopicPerformance).values(newStats);
-          }
-        }
-      });
+          : Promise.resolve(),
+        inserts.length > 0
+          ? tx.insert(userTopicPerformance).values(inserts)
+          : Promise.resolve(),
+      ]);
     } catch (error) {
+      console.error("Error in updateTopicPerformance:", error);
       throw error;
     }
   },

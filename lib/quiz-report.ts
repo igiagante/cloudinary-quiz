@@ -12,114 +12,122 @@ import {
 } from "@/lib/db/schema";
 import { userRepository } from "@/lib/db/repositories/user.repository";
 import { v4 as uuidv4 } from "uuid";
-import { eq, and } from "drizzle-orm";
-import { sql } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 
 export async function generateQuizReport(
   quizQuestionsList: QuizQuestion[],
   userAnswers: Record<string, string>,
   userId?: string // Optional user ID for tracking
 ): Promise<QuizResults & { quizId: string }> {
-  const results = analyzeQuizResults(quizQuestionsList, userAnswers);
+  const analysis = analyzeQuizResults(quizQuestionsList, userAnswers);
 
   try {
     return await db.transaction(async (tx) => {
-      let dbUserId: string | undefined;
+      // Run initial queries in parallel
+      const [userResult, dbQuestions] = await Promise.all([
+        // User lookup
+        userId
+          ? tx
+              .select({ id: users.id, uuid: users.uuid })
+              .from(users)
+              .where(eq(users.uuid, userId))
+              .limit(1)
+          : Promise.resolve([]),
 
-      if (userId) {
-        // Find user by UUID
-        const userResult = await tx
-          .select({
-            id: users.id,
-            uuid: users.uuid,
+        // Questions lookup
+        tx
+          .select({ id: questions.id, uuid: questions.uuid })
+          .from(questions)
+          .where(
+            inArray(
+              questions.uuid,
+              quizQuestionsList.map((q) => q.id)
+            )
+          ),
+      ]);
+
+      // Process user and get options in parallel
+      const [quiz, allOptions] = await Promise.all([
+        // Handle user creation if needed
+        tx
+          .insert(quizzes)
+          .values({
+            uuid: uuidv4(),
+            userId: userResult[0]?.id,
+            numQuestions: quizQuestionsList.length,
+            isCompleted: true,
+            score: Math.round(analysis.score.percentage),
+            passPercentage: 80,
+            createdAt: new Date(),
+            completedAt: new Date(),
           })
-          .from(users)
-          .where(eq(users.uuid, userId))
-          .limit(1);
+          .returning()
+          .then(([quiz]) => quiz),
 
-        if (userResult.length > 0) {
-          dbUserId = userResult[0].id;
-        } else {
-          // Create a new anonymous user
-          const [newUser] = await tx
-            .insert(users)
-            .values({
-              id: uuidv4(), // Generate a new ID
-              uuid: userId, // Use the provided userId as UUID
-              isAnonymous: true,
-              createdAt: new Date(),
-              lastLoginAt: new Date(),
-            })
-            .returning();
+        // Fetch options
+        tx
+          .select({
+            id: options.id,
+            questionId: options.questionId,
+            text: options.text,
+          })
+          .from(options)
+          .where(
+            inArray(
+              options.questionId,
+              dbQuestions.map((q) => q.id)
+            )
+          ),
+      ]);
 
-          dbUserId = newUser.id; // Use the new ID for database relations
-        }
-      }
-
-      // 2. Create the quiz
-      const [quiz] = await tx
-        .insert(quizzes)
-        .values({
-          uuid: uuidv4(),
-          userId: dbUserId,
-          numQuestions: quizQuestionsList.length,
-          isCompleted: true,
-          score: Math.round(results.score.percentage),
-          passPercentage: 80,
-          createdAt: new Date(),
-          completedAt: new Date(),
-        })
-        .returning();
-
-      // 3. Map frontend questions to database format
+      // 3. Prepare all question mappings in advance
       const mappedQuestions = await mapFrontendQuizToDb(
         quizQuestionsList,
         userAnswers,
         quiz.uuid
       );
 
-      // 4. Save user answers
       if (mappedQuestions.length > 0) {
-        for (const mappedQuestion of mappedQuestions) {
-          // First, find the question ID by UUID
-          const [dbQuestion] = await tx
-            .select({
-              id: questions.id,
-            })
-            .from(questions)
-            .where(eq(questions.uuid, mappedQuestion.id))
-            .limit(1);
+        // Create a lookup map for faster access
+        const questionLookup = new Map(dbQuestions.map((q) => [q.uuid, q.id]));
 
-          if (!dbQuestion) {
-            continue;
-          }
+        // Create option lookup map for faster access
+        const optionLookup = new Map();
+        allOptions.forEach((opt) => {
+          const key = `${opt.questionId}:${opt.text}`;
+          optionLookup.set(key, opt.id);
+        });
 
-          // Then, find the option ID for the user's answer
-          const [userAnswerOption] = await tx
-            .select({ id: options.id })
-            .from(options)
-            .where(
-              and(
-                eq(options.questionId, dbQuestion.id),
-                eq(options.text, mappedQuestion.userAnswer)
-              )
-            )
-            .limit(1);
+        // 6. Prepare all quiz questions for batch insert
+        const quizQuestionsToInsert = mappedQuestions
+          .filter((q) => questionLookup.has(q.id))
+          .map((mappedQuestion) => {
+            const dbQuestionId = questionLookup.get(mappedQuestion.id);
+            if (!dbQuestionId) return null;
 
-          await tx.insert(quizQuestions).values({
-            quizId: quiz.id,
-            questionId: dbQuestion.id,
-            userAnswer: userAnswerOption?.id || null,
-            isCorrect:
-              mappedQuestion.userAnswer === mappedQuestion.correctAnswer,
-          });
+            const optionKey = `${dbQuestionId}:${mappedQuestion.userAnswer}`;
+            const userAnswerOptionId = optionLookup.get(optionKey) || null;
+
+            return {
+              quizId: quiz.id,
+              questionId: dbQuestionId,
+              userAnswer: userAnswerOptionId,
+              isCorrect:
+                mappedQuestion.userAnswer === mappedQuestion.correctAnswer,
+            };
+          })
+          .filter((q): q is NonNullable<typeof q> => q !== null);
+
+        // Batch insert all quiz questions at once
+        if (quizQuestionsToInsert.length > 0) {
+          await tx.insert(quizQuestions).values(quizQuestionsToInsert);
         }
       }
 
-      // 5. Save topic performance
-      if (results.topicPerformance) {
+      // 7. Save topic performance (batch insert)
+      if (analysis.topicPerformance) {
         const topicPerformanceToInsert = Object.entries(
-          results.topicPerformance
+          analysis.topicPerformance
         )
           .filter(([_, data]) => data && data.total > 0)
           .map(([topic, data]) => ({
@@ -132,35 +140,26 @@ export async function generateQuizReport(
           }));
 
         if (topicPerformanceToInsert.length > 0) {
-          await tx
-            .insert(topicPerformance)
-            .values(topicPerformanceToInsert)
-            .returning();
+          await tx.insert(topicPerformance).values(topicPerformanceToInsert);
         }
       }
 
-      // 6. Update user topic performance statistics (if user exists)
-      if (dbUserId) {
-        try {
-          const topicStats = await tx
-            .select()
-            .from(topicPerformance)
-            .where(eq(topicPerformance.quizId, quiz.id));
-
-          if (topicStats.length > 0) {
-            await userRepository.updateTopicPerformance(dbUserId, quiz.id, tx);
-          }
-        } catch (error) {
-          // Handle error silently
-        }
+      // 8. Update user topic performance statistics (if user exists)
+      if (userResult[0]?.id) {
+        // Fire and forget - don't await the update
+        void userRepository
+          .updateTopicPerformance(userResult[0].id, quiz.id, tx)
+          .catch((error) => {
+            console.error("Error updating user topic performance:", error);
+          });
       }
 
       // Return the results with the quiz ID
       return {
-        ...results,
+        ...analysis,
         quizId: quiz.uuid,
-        topicBreakdown: results.topicPerformance
-          ? Object.entries(results.topicPerformance).map(([topic, data]) => ({
+        topicBreakdown: analysis.topicPerformance
+          ? Object.entries(analysis.topicPerformance).map(([topic, data]) => ({
               topic: topic as any,
               ...data,
             }))
@@ -170,10 +169,10 @@ export async function generateQuizReport(
   } catch (error) {
     // If database saving fails, still return the analysis results
     return {
-      ...results,
+      ...analysis,
       quizId: "error-saving",
-      topicBreakdown: results.topicPerformance
-        ? Object.entries(results.topicPerformance).map(([topic, data]) => ({
+      topicBreakdown: analysis.topicPerformance
+        ? Object.entries(analysis.topicPerformance).map(([topic, data]) => ({
             topic: topic as any,
             ...data,
           }))

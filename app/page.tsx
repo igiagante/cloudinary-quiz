@@ -106,7 +106,6 @@ export default function Home() {
           isComplete: false,
         };
         localStorage.setItem("quizState", JSON.stringify(quizState));
-        console.log("Quiz state saved successfully:", quizState);
       } catch (storageError) {
         console.error("Failed to save quiz state:", storageError);
         throw new Error(

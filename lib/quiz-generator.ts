@@ -31,30 +31,33 @@ export async function generateQuizQuestions(
   topics?: Topic[],
   difficulty?: "easy" | "medium" | "hard"
 ): Promise<QuizQuestion[]> {
-  // If no specific topics are provided, randomly select from all topics
+  console.time("Total Quiz Generation");
+
+  console.time("Topic Selection");
   const selectedTopics =
     topics || generateRandomTopics(Math.min(numQuestions, 5));
-
-  // Create a balanced distribution of questions across selected topics
   const topicDistribution = createTopicDistribution(
     selectedTopics,
     numQuestions
   );
+  console.timeEnd("Topic Selection");
 
-  // Generate prompts and collect results
-  const questions: QuizQuestion[] = [];
+  console.time("Questions Generation");
+  const questionPromises = Object.entries(topicDistribution).map(
+    ([topic, count]) =>
+      generateQuestionsForTopic(topic as Topic, count, difficulty)
+  );
 
-  for (const [topic, count] of Object.entries(topicDistribution)) {
-    const topicQuestions = await generateQuestionsForTopic(
-      topic as Topic,
-      count,
-      difficulty
-    );
-    questions.push(...topicQuestions);
-  }
+  const questionSets = await Promise.all(questionPromises);
+  console.timeEnd("Questions Generation");
 
-  // Shuffle questions for random order
-  return shuffleArray(questions);
+  console.time("Final Processing");
+  const questions = questionSets.flat();
+  const shuffledQuestions = shuffleArray(questions);
+  console.timeEnd("Final Processing");
+
+  console.timeEnd("Total Quiz Generation");
+  return shuffledQuestions;
 }
 
 function generateRandomTopics(count: number): Topic[] {
@@ -91,6 +94,8 @@ async function generateQuestionsForTopic(
   count: number,
   difficulty?: "easy" | "medium" | "hard"
 ): Promise<QuizQuestion[]> {
+  const startTime = Date.now();
+
   const topicDetails = CLOUDINARY_TOPICS[topic];
   const difficultyLevel =
     difficulty ||
@@ -114,6 +119,7 @@ async function generateQuestionsForTopic(
 
     For each question you generate:
     - Include exactly 4 options (A, B, C, D) with only one correct answer
+    - Vary the position of the correct answer (don't always make it the first option)
     - Ensure distractors (wrong answers) are plausible but clearly incorrect upon careful examination
     - Write a comprehensive explanation for why the correct answer is right AND why each incorrect option is wrong
     - Tag with appropriate topic, subtopic, and difficulty level
@@ -149,6 +155,7 @@ async function generateQuestionsForTopic(
       ]
     }`;
 
+    console.time(`OpenAI API Call - ${topic}`);
     const response = await openai.chat.completions.create({
       model: "gpt-4-turbo-preview",
       response_format: { type: "json_object" },
@@ -157,6 +164,7 @@ async function generateQuestionsForTopic(
         { role: "user", content: userPrompt },
       ],
     });
+    console.timeEnd(`OpenAI API Call - ${topic}`);
 
     const rawOutput = response.choices[0].message.content;
     if (!rawOutput) throw new Error("No content in response");
@@ -164,15 +172,26 @@ async function generateQuestionsForTopic(
     const parsedOutput = JSON.parse(rawOutput);
     const validatedData = questionsArraySchema.parse(parsedOutput);
 
-    return validatedData.questions.map((q) => ({
-      id: uuidv4(),
-      question: q.question,
-      options: q.options,
-      correctAnswer: q.options[q.correctAnswerIndex],
-      explanation: q.explanation,
-      topic: topic, // Ensure we use the original topic
-      difficulty: difficultyLevel,
-    }));
+    const endTime = Date.now();
+    console.log(`Time taken for ${topic}: ${endTime - startTime}ms`);
+    return validatedData.questions.map((q) => {
+      // Shuffle the options and track the new correct answer position
+      const optionsWithIndexes = q.options.map((opt, index) => ({
+        text: opt,
+        isCorrect: index === q.correctAnswerIndex,
+      }));
+      const shuffledOptions = shuffleArray(optionsWithIndexes);
+
+      return {
+        id: uuidv4(),
+        question: q.question,
+        options: shuffledOptions.map((opt) => opt.text),
+        correctAnswer: shuffledOptions.find((opt) => opt.isCorrect)!.text,
+        explanation: q.explanation,
+        topic: topic,
+        difficulty: difficultyLevel,
+      };
+    });
   } catch (error) {
     console.error(`Error generating questions for ${topic}:`, error);
     return [];
@@ -188,7 +207,7 @@ function shuffleArray<T>(array: T[]): T[] {
   return newArray;
 }
 
-// Utility function to analyze quiz results
+// Optimize the analysis function
 export function analyzeQuizResults(
   questions: QuizQuestion[],
   userAnswers: Record<string, string>
@@ -202,58 +221,46 @@ export function analyzeQuizResults(
   improvementAreas: Topic[];
   strengths: Topic[];
 } {
-  // Calculate overall score
-  let totalCorrect = 0;
+  console.time("Quiz Analysis");
 
-  // Initialize topic performance tracking
-  const topicPerformance: Record<
-    Topic,
-    { correct: number; total: number; percentage: number }
-  > = {} as Record<
-    Topic,
-    { correct: number; total: number; percentage: number }
-  >;
+  // Initialize performance tracking with a single pass through the data
+  const topicPerformance = CLOUDINARY_TOPIC_LIST.reduce((acc, topic) => {
+    acc[topic] = { correct: 0, total: 0, percentage: 0 };
+    return acc;
+  }, {} as Record<Topic, { correct: number; total: number; percentage: number }>);
 
-  CLOUDINARY_TOPIC_LIST.forEach((topic) => {
-    topicPerformance[topic] = { correct: 0, total: 0, percentage: 0 };
-  });
-
-  // Analyze each question
-  questions.forEach((question) => {
-    const userAnswer = userAnswers[question.id];
-    const isCorrect = userAnswer === question.correctAnswer;
-
-    if (isCorrect) {
-      totalCorrect++;
-      topicPerformance[question.topic].correct++;
-    }
-
+  // Single pass through questions to calculate everything
+  const totalCorrect = questions.reduce((correct, question) => {
+    const isCorrect = userAnswers[question.id] === question.correctAnswer;
     topicPerformance[question.topic].total++;
-  });
-
-  // Calculate percentages for each topic
-  Object.keys(topicPerformance).forEach((topic) => {
-    const t = topic as Topic;
-    if (topicPerformance[t].total > 0) {
-      topicPerformance[t].percentage =
-        (topicPerformance[t].correct / topicPerformance[t].total) * 100;
+    if (isCorrect) {
+      topicPerformance[question.topic].correct++;
+      return correct + 1;
     }
+    return correct;
+  }, 0);
+
+  // Calculate percentages in one go
+  Object.values(topicPerformance).forEach((topic) => {
+    topic.percentage =
+      topic.total > 0 ? (topic.correct / topic.total) * 100 : 0;
   });
 
-  // Calculate overall percentage
   const overallPercentage = (totalCorrect / questions.length) * 100;
 
-  // Determine improvement areas (topics with < 70% score)
-  const improvementAreas = Object.entries(topicPerformance)
-    .filter(([_, data]) => data.total > 0 && data.percentage < 70)
-    .map(([topic]) => topic as Topic);
+  // Use filter once for both improvements and strengths
+  const [improvementAreas, strengths] = Object.entries(topicPerformance).reduce(
+    (acc, [topic, data]) => {
+      if (data.total > 0) {
+        if (data.percentage < 70) acc[0].push(topic as Topic);
+        if (data.percentage >= 90) acc[1].push(topic as Topic);
+      }
+      return acc;
+    },
+    [[], []] as [Topic[], Topic[]]
+  );
 
-  // Determine strengths (topics with >= 90% score)
-  const strengths = Object.entries(topicPerformance)
-    .filter(([_, data]) => data.total > 0 && data.percentage >= 90)
-    .map(([topic]) => topic as Topic);
-
-  return {
+  const result = {
     score: {
       correct: totalCorrect,
       total: questions.length,
@@ -264,4 +271,7 @@ export function analyzeQuizResults(
     improvementAreas,
     strengths,
   };
+
+  console.timeEnd("Quiz Analysis");
+  return result;
 }
