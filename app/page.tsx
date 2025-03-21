@@ -1,103 +1,218 @@
-import Image from "next/image";
+// app/page.tsx
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { CLOUDINARY_TOPIC_LIST } from "@/lib/cloudinary-topics";
+import { Topic } from "@/types";
+import { questionRepository } from "@/lib/db/repositories/question.repository";
+import AdminLink from "@/components/admin-link";
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const router = useRouter();
+  const [numQuestions, setNumQuestions] = useState(10);
+  const [selectedTopics, setSelectedTopics] = useState<Topic[]>([]);
+  const [difficulty, setDifficulty] = useState<
+    "easy" | "medium" | "hard" | "mixed"
+  >("mixed");
+  const [isLoading, setIsLoading] = useState(false);
+  const [dbStats, setDbStats] = useState<{ totalQuestions: number } | null>(
+    null
+  );
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const questions = await questionRepository.getAll();
+        setDbStats({ totalQuestions: questions.length });
+      } catch (error) {
+        console.error("Error fetching questions:", error);
+        setDbStats({ totalQuestions: 0 });
+      }
+    };
+    fetchStats();
+  }, []);
+
+  const handleTopicToggle = (topic: Topic) => {
+    if (selectedTopics.includes(topic)) {
+      setSelectedTopics(selectedTopics.filter((t) => t !== topic));
+    } else {
+      setSelectedTopics([...selectedTopics, topic]);
+    }
+  };
+
+  const handleStartQuiz = async () => {
+    setIsLoading(true);
+
+    try {
+      // Generate quiz questions from the database
+      const response = await fetch("/api/generate-questions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          numQuestions,
+          topics: selectedTopics.length > 0 ? selectedTopics : undefined,
+          difficulty: difficulty === "mixed" ? undefined : difficulty,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate quiz");
+      }
+
+      const data = await response.json();
+
+      // Store quiz state in the database or session
+      // For now, we'll keep using localStorage until we set up the quiz session table
+      localStorage.setItem(
+        "quizState",
+        JSON.stringify({
+          questions: data.questions,
+          currentQuestionIndex: 0,
+          userAnswers: {},
+          isComplete: false,
+        })
+      );
+
+      // Navigate to quiz page
+      router.push("/quiz");
+    } catch (error) {
+      console.error("Error starting quiz:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <main className="container mx-auto px-4 py-8 max-w-3xl">
+      <div className="text-center mb-8">
+        <h1 className="text-3xl font-bold mb-2">
+          Cloudinary Certification Quiz
+        </h1>
+        <p className="text-gray-600">
+          Test your knowledge and prepare for the Cloudinary certification exam
+        </p>
+
+        {dbStats && dbStats.totalQuestions > 0 && (
+          <div className="mt-2 text-sm text-gray-500">
+            {dbStats.totalQuestions} questions available in the database
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+        <h2 className="text-xl font-semibold mb-4">Quiz Settings</h2>
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Number of Questions
+          </label>
+          <input
+            type="range"
+            min="5"
+            max="30"
+            step="5"
+            value={numQuestions}
+            onChange={(e) => setNumQuestions(Number(e.target.value))}
+            className="w-full"
+          />
+          <div className="flex justify-between text-sm text-gray-500">
+            <span>5</span>
+            <span>10</span>
+            <span>15</span>
+            <span>20</span>
+            <span>25</span>
+            <span>30</span>
+          </div>
+          <p className="mt-1 text-sm text-gray-500">
+            Selected: {numQuestions} questions
+          </p>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Difficulty Level
+          </label>
+          <div className="grid grid-cols-4 gap-2">
+            {["easy", "medium", "hard", "mixed"].map((level) => (
+              <button
+                key={level}
+                onClick={() => setDifficulty(level as any)}
+                className={`py-2 px-4 rounded-md text-sm font-medium ${
+                  difficulty === level
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+                }`}
+              >
+                {level.charAt(0).toUpperCase() + level.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Topics{" "}
+            {selectedTopics.length > 0 && `(${selectedTopics.length} selected)`}
+          </label>
+          <p className="mt-1 mb-3 text-sm text-gray-500">
+            {selectedTopics.length === 0
+              ? "All topics will be included randomly"
+              : "Only selected topics will be included"}
+          </p>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {CLOUDINARY_TOPIC_LIST.map((topic) => (
+              <div
+                key={topic}
+                onClick={() => handleTopicToggle(topic)}
+                className={`p-3 rounded-md cursor-pointer border ${
+                  selectedTopics.includes(topic)
+                    ? "border-blue-500 bg-blue-50"
+                    : "border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                <div className="flex items-start">
+                  <div
+                    className={`w-5 h-5 flex items-center justify-center rounded-sm mr-2 ${
+                      selectedTopics.includes(topic)
+                        ? "bg-blue-500 text-white"
+                        : "border border-gray-300"
+                    }`}
+                  >
+                    {selectedTopics.includes(topic) && "✓"}
+                  </div>
+                  <span className="text-sm">{topic}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={handleStartQuiz}
+          disabled={isLoading}
+          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+          {isLoading ? "Generating Quiz..." : "Start Quiz"}
+        </button>
+      </div>
+
+      <div className="bg-blue-50 rounded-lg border border-blue-100 p-4">
+        <h3 className="text-md font-medium mb-2">
+          About Cloudinary Certification
+        </h3>
+        <p className="text-sm text-gray-700">
+          The Cloudinary Certification requires an 80% passing score. This
+          practice quiz helps you prepare by testing your knowledge across key
+          Cloudinary topics and identifying areas for improvement. Regular
+          practice will increase your chances of passing the certification exam.
+        </p>
+      </div>
+
+      <AdminLink />
+    </main>
   );
 }
