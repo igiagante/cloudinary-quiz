@@ -1,9 +1,7 @@
-# Option Format Test
-
-## 1. Different formats test
-
-- A) First option
-- B) Second option
-- C) Third option
-
-Explanation: This tests different option formats.
+# Format Test
+    
+## Questions
+1. Choose the best answer:
+   - [ ] Option A
+   - [x] Option B
+   - [ ] Option C

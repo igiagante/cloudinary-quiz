@@ -149,6 +149,41 @@ Track your performance to identify areas for improvement:
 - **Weak Areas**: Quickly identify topics that need more study
 - **Progress Over Time**: See how your scores improve with practice
 
+## 📑 Quiz Markdown Parsers
+
+The application supports different markdown formatting styles for quiz questions:
+
+- **Standard Parser**: Handles markdown questions with hyphenated options format
+
+  ```markdown
+  **1. Question text?**
+
+  - A) First option
+  - B) Second option
+  - C) Third option
+  - D) Fourth option
+  ```
+
+- **Alternative Parser**: Processes markdown questions with direct option format (no hyphens)
+
+  ```markdown
+  **1. Question text?**
+
+  A) First option
+  B) Second option
+  C) Third option
+  D) Fourth option
+  ```
+
+- **Smart Multi-Parser**: Automatically selects the appropriate parser based on the file format
+
+The system includes testing utilities to verify parser functionality:
+
+- `npm run db:test-parser`: Test the standard parser
+- `npm run db:test-both`: Test both parsers on a specific file
+- `npm run db:test-all`: Test all quiz files and determine best parser for each
+- `npm run db:test-multi`: Test the smart multi-parser on all files
+
 ## 🤝 Contributing
 
 Contributions are welcome! Here's how you can help:

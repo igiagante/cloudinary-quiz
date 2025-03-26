@@ -103,7 +103,9 @@ export async function processCommands(): Promise<void> {
         break;
 
       case "workflow":
+        log("Running comprehensive workflow: clean → seed → check", "bright");
         await runWorkflow();
+        log("✓ Workflow completed successfully!", "green");
         break;
 
       case "help":
@@ -111,9 +113,25 @@ export async function processCommands(): Promise<void> {
         showHelp();
         break;
     }
+
+    log("Command execution completed!", "bright");
   } catch (error) {
     log("✗ An error occurred:", "red");
     console.error(error);
     process.exit(1);
   }
+}
+
+// Run the command processor if this module is executed directly
+if (require.main === module) {
+  processCommands()
+    .then(() => {
+      log("CLI execution completed successfully", "green");
+      process.exit(0);
+    })
+    .catch((error) => {
+      log("CLI execution failed", "red");
+      console.error(error);
+      process.exit(1);
+    });
 }

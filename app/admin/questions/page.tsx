@@ -32,6 +32,8 @@ type Question = {
   qualityScore: number;
   options: string[];
   correctAnswer: string;
+  hasMultipleCorrectAnswers?: boolean;
+  correctAnswers?: string[];
 };
 
 export default function QuestionsManagementPage() {
@@ -226,6 +228,7 @@ export default function QuestionsManagementPage() {
                     <TableHead>Question</TableHead>
                     <TableHead>Topic</TableHead>
                     <TableHead>Source</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Quality</TableHead>
                     <TableHead>Actions</TableHead>
@@ -244,6 +247,13 @@ export default function QuestionsManagementPage() {
                         <Badge className={getSourceColor(question.source)}>
                           {question.source}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {question.hasMultipleCorrectAnswers ? (
+                          <Badge className="bg-purple-500">Multiple</Badge>
+                        ) : (
+                          <Badge className="bg-blue-500">Single</Badge>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(question.status)}>

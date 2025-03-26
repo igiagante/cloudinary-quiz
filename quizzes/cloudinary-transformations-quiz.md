@@ -170,13 +170,15 @@ c_scale,w_500,dpr_1.0_2.0,q_auto
 
 **Difficulty:** Medium
 
-**8. When applying text overlays to an image, which of these parameters are required? (Select all that apply)**
+Here's the question written in Markdown format:
 
-A) l* (layer)
-B) co* (color)
-C) fl* (flag)
-D) g* (gravity)
-E) fo\_ (font)
+**8. When applying text overlays to an image using Cloudinary's transformation URL API, which of these parameters are required? (Select all that apply)**
+
+A) `text`
+B) `color`  
+C) `gravity`
+D) `font_family`
+E) `font_size`
 
 **Difficulty:** Hard
 

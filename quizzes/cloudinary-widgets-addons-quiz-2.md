@@ -138,3 +138,24 @@ C) Create a custom add-on using Cloudinary's Add-on Framework
 D) Integrate third-party libraries and services via webhooks
 
 **Difficulty:** Hard
+
+## Answers
+
+B) When deep integration with an existing content management system is required
+C) AI Tagging and Moderation
+B) Customize the widget's look and feel to match the application's branding
+C) Configure the widget to allow asset tagging, categorization, and searching
+B) Faster image downloads and rendering
+A) import { CloudinaryUploadWidget } from 'cloudinary-react';
+B) Cross-browser compatibility and adaptive bitrate streaming
+B) Use Cloudinary's responsive image breakpoints add-on to automate the process
+D) Dynamically generate responsive image URLs with specific width and height parameters
+B) To specify default upload options and access control permissions
+B) cloudinary.url('sample.jpg', { width: 800, crop: 'fit' })
+B) Easy rollback and comparison of asset changes over time
+B) Extract dominant colors from images to enable color-based searching
+C) Detect and identify objects, faces, and text within images
+C) To prevent unauthorized access to sensitive asset transformations
+A) const cloudinary = require('cloudinary').v2;
+C) Secure access control and token-based asset authorization
+A) Develop and deploy custom Functions-as-a-Service (FaaS) using Cloudinary Functions

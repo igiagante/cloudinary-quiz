@@ -80,6 +80,8 @@ export type QuestionInput = {
     text: string;
     isCorrect: boolean;
   }[];
+  hasMultipleCorrectAnswers?: boolean;
+  correctAnswers?: string[];
 };
 
 export const questionRepository = {
@@ -246,6 +248,11 @@ export const questionRepository = {
           qualityScore: input.qualityScore || 0,
           usageCount: 0,
           successRate: 0,
+          hasMultipleCorrectAnswers: input.hasMultipleCorrectAnswers || false,
+          correctAnswers:
+            input.hasMultipleCorrectAnswers && input.correctAnswers
+              ? input.correctAnswers
+              : null,
           createdAt: new Date(),
           updatedAt: new Date(),
         })
@@ -474,6 +481,14 @@ export const questionRepository = {
             source: validSource,
             correctAnswer: input.options.find((o) => o.isCorrect)?.text || "",
             options: input.options.map((o) => o.text),
+            qualityScore: input.qualityScore || 0,
+            usageCount: 0,
+            successRate: 0,
+            hasMultipleCorrectAnswers: input.hasMultipleCorrectAnswers || false,
+            correctAnswers:
+              input.hasMultipleCorrectAnswers && input.correctAnswers
+                ? input.correctAnswers
+                : null,
             createdAt: new Date(),
             updatedAt: new Date(),
           })

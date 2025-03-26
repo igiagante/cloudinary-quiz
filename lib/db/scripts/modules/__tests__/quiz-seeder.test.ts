@@ -39,9 +39,12 @@ afterAll(() => {
 // Mock the database
 jest.mock("../db", () => {
   const mockInsertFn = jest.fn();
+
   mockInsertFn.mockImplementation(() => ({
     values: jest.fn().mockReturnThis(),
-    returning: jest.fn().mockResolvedValue([{ id: 1, uuid: uuidv4() }]),
+    returning: jest
+      .fn()
+      .mockResolvedValue([{ id: 1, uuid: "mock-uuid-value" }]),
   }));
 
   return {

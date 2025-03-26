@@ -368,26 +368,33 @@ export default function AdminDashboard() {
                   </h3>
 
                   <div className="space-y-2 mb-4">
-                    {question.options.map((option, index) => (
-                      <div
-                        key={index}
-                        className={`p-2 rounded-md ${
-                          option === question.correctAnswer
-                            ? "bg-green-50 border border-green-200"
-                            : "bg-gray-50"
-                        }`}
-                      >
-                        <span className="font-medium mr-2">
-                          {String.fromCharCode(65 + index)}.
-                        </span>
-                        {option}
-                        {option === question.correctAnswer && (
-                          <span className="ml-2 text-green-600 font-medium text-sm">
-                            (Correct)
+                    {question.options.map((option, index) => {
+                      const isCorrect = question.hasMultipleCorrectAnswers
+                        ? Array.isArray(question.correctAnswers) &&
+                          question.correctAnswers.includes(option)
+                        : option === question.correctAnswer;
+
+                      return (
+                        <div
+                          key={index}
+                          className={`p-2 rounded-md ${
+                            isCorrect
+                              ? "bg-green-50 border border-green-200"
+                              : "bg-gray-50"
+                          }`}
+                        >
+                          <span className="font-medium mr-2">
+                            {String.fromCharCode(65 + index)}.
                           </span>
-                        )}
-                      </div>
-                    ))}
+                          {option}
+                          {isCorrect && (
+                            <span className="ml-2 text-green-600 font-medium text-sm">
+                              (Correct)
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
 
                   <p className="text-sm text-gray-700 mb-4">

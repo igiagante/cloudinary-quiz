@@ -139,3 +139,26 @@ C) Improved SEO with descriptive asset file names
 D) Simplified asset management by maintaining a single original file
 
 **Difficulty:** Medium
+
+## Answers
+
+A) Media Optimizer focuses on image and video manipulation, while DAM provides asset organization and governance
+C) Content-Aware Crop
+B) Create separate Cloudinary accounts with different cloud names for each environment
+A) Showcase improved website performance and faster load times
+B) Highlight reduced infrastructure and storage costs
+B) Use Cloudinary's SDKs and APIs to programmatically manage and deliver assets
+A) https://res.cloudinary.com/<cloud_name>/image/upload/w_200,h_200,c_crop/sample.jpg
+C) Automatic transcoding and adaptive bitrate streaming
+A) Automatically crop images to focus on the product
+B) Generate responsive image breakpoints for different devices
+C) Compress images to reduce file size without losing visual quality
+C) Proxy all uploads through a server-side endpoint to hide the API secret
+B) Overlay the post title and description on a template image using Cloudinary's text overlay capabilities
+C) Crop the featured post image to optimal social media thumbnail dimensions
+C) Restrict access to certain transformation parameters to prevent misuse
+D) Utilize the Cloudinary Upload API with chunk upload support and resume functionality
+C) Access control and user permissions
+A) Store asset metadata and delivery URLs within the CMS content model
+C) Utilize Cloudinary's CMS integrations or plugins for seamless synchronization
+D) Simplified asset management by maintaining a single original file

@@ -1,13 +1,8 @@
-# Sample Quiz
-
+# Difficulty Test
+    
 ## Questions
-
-**1. What is 2+2?**
-A) 3
-B) 4
-C) 5
-**Difficulty: easy**
-
-## Answers
-
-1. B - The answer is 4
+1. Easy Question
+   - [ ] Wrong
+   - [x] Right
+   
+   > difficulty: easy

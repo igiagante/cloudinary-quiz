@@ -15,7 +15,7 @@ This quiz focuses on user management, role-based access control, and security st
 **1. What is the most secure approach to managing user access in a multi-tenant SaaS platform?**
 
 A) Using a single global access policy
-B) Implementing granular, role-based access controls  
+B) Implementing granular, role-based access controls
 C) Relying on default permission settings
 D) Manual user management
 
@@ -26,16 +26,10 @@ D) Manual user management
 A)
 
 ```javascript
-cloudinary.v2.provisioning.account
-  .create_sub_account({
-    name: "marketing",
-    cloud_name: "parent_cloud_name",
-  })
+cloudinary.provisioning.account
+  .sub_accounts(true, null, "marketing")
   .then((response) => {
     console.log(response);
-  })
-  .catch((error) => {
-    console.error(error);
   });
 ```
 
@@ -83,9 +77,9 @@ E) Manual access management
 A)
 
 ```javascript
-cloudinary.v2.api.update_user("user_id", {
-  role: "editor",
-  custom_attributes: { permissions: ["upload", "edit"] },
+cloudinary.admin.update_user("user_id", {
+  roles: ["editor"],
+  permissions: ["upload", "edit"],
 });
 ```
 
@@ -139,14 +133,9 @@ cloudinary.admin.users({
 B)
 
 ```javascript
-cloudinary.v2.provisioning.account
-  .sub_account_users("sub_account_id")
-  .then((users) => {
-    console.log(users);
-  })
-  .catch((error) => {
-    console.error(error);
-  });
+cloudinary.provisioning.users().then((users) => {
+  console.log(users);
+});
 ```
 
 C)
@@ -171,7 +160,7 @@ cloudinary.users.list({
 
 A) Static role assignments
 B) Dynamic role-based access with automated policy enforcement
-C) Manual user management  
+C) Manual user management
 D) Using default access settings
 
 **Difficulty:** Medium
@@ -204,3 +193,68 @@ D) Developing dynamic access policies
 E) Using default group settings
 
 **Difficulty:** Hard
+
+**11. What approach provides the most robust protection against unauthorized access?**
+
+A) Basic password protection
+B) Multi-layered authentication with continuous verification
+C) Using default security settings
+D) Manual access monitoring
+
+**Difficulty:** Medium
+
+**12. For a content marketplace with multiple user types, what strategy ensures optimal access management?**
+
+A) Uniform access for all users
+B) Implementing context-aware, role-based access controls
+C) Manual user classification
+D) Using simplistic permission models
+
+**Difficulty:** Medium
+
+**13. What authentication method offers the most secure integration for third-party applications? (Select up to 3)**
+
+A) OAuth 2.0 authentication
+B) JWT (JSON Web Tokens)
+C) Basic API key authentication
+D) Short-lived access tokens
+E) Static credential sharing
+
+**Difficulty:** Hard
+
+**14. How can an organization prevent unauthorized asset access?**
+
+A) Using generic access controls
+B) Implementing dynamic, context-aware access restrictions
+C) Relying on default security settings
+D) Manual access review
+
+**Difficulty:** Medium
+
+**15. What emerging approach will most transform user and access management? (Select up to 3)**
+
+A) Zero-trust security models
+B) AI-powered access monitoring
+C) Blockchain-based authentication
+D) Traditional role-based access
+E) Manual permission management
+
+**Difficulty:** Hard
+
+## Answers
+
+1. B - Granular, role-based access controls provide the most secure approach to user management.
+2. A - The `cloudinary.provisioning.account.sub_accounts()` method is the correct way to create a sub-account with specific configurations.
+3. A, B, D - Role-based access control, custom user groups, and granular permission sets provide maximum flexibility.
+4. A - The `cloudinary.admin.update_user()` method allows comprehensive user permission and role management.
+5. A, B, D - Multi-factor authentication, role-based access controls, and dynamic access tokens ensure comprehensive security.
+6. B - `cloudinary.provisioning.users()` provides the most straightforward method to list users in a Cloudinary account.
+7. B - Dynamic role-based access with automated policy enforcement is most effective in dynamic environments.
+8. A, B, D - Hierarchical user roles, custom permission sets, and context-specific access policies provide granular control.
+9. B - Short-lived, signed authentication tokens provide the most secure API integration method.
+10. A, B, D - Centralized user management, standardized role templates, and dynamic access policies ensure consistent controls.
+11. B - Multi-layered authentication with continuous verification provides the most robust access protection.
+12. B - Context-aware, role-based access controls ensure optimal access management for diverse user types.
+13. A, B, D - OAuth 2.0, JWT, and short-lived access tokens offer the most secure authentication methods.
+14. B - Dynamic, context-aware access restrictions prevent unauthorized asset access most effectively.
+15. A, B, C - Zero-trust security models, AI-powered access monitoring, and blockchain-based authentication will transform user management.
