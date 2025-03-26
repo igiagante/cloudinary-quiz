@@ -18,11 +18,26 @@ export default function QuizPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isReviewMode, setIsReviewMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [quizSettings, setQuizSettings] = useState<{
+    model?: "openai" | "claude";
+    topics?: string[];
+  }>({});
 
   const currentQuestion = quizState.questions[quizState.currentQuestionIndex];
 
   useEffect(() => {
     try {
+      // Get quiz settings from localStorage if available
+      const settingsStr = localStorage.getItem("quizSettings");
+      if (settingsStr) {
+        try {
+          const settings = JSON.parse(settingsStr);
+          setQuizSettings(settings);
+        } catch (e) {
+          console.error("Failed to parse quiz settings", e);
+        }
+      }
+
       // Get existing quiz state from localStorage
       const quizStateStr = localStorage.getItem("quizState");
       if (!quizStateStr) {
@@ -41,7 +56,7 @@ export default function QuizPage() {
     }
   }, []);
 
-  const handleAnswer = (questionId: string, answer: string) => {
+  const handleAnswer = (questionId: string, answer: string | string[]) => {
     setQuizState((prev) => ({
       ...prev,
       userAnswers: {
@@ -49,6 +64,26 @@ export default function QuizPage() {
         [questionId]: answer,
       },
     }));
+  };
+
+  const handleFeedback = async (questionId: string, isHelpful: boolean) => {
+    try {
+      const userId = localStorage.getItem("userId");
+
+      await fetch("/api/question-feedback", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          questionId,
+          isHelpful,
+          userId,
+        }),
+      });
+    } catch (error) {
+      console.error("Error submitting feedback:", error);
+    }
   };
 
   const handleNext = () => {
@@ -91,9 +126,35 @@ export default function QuizPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
+        <div className="text-center p-6 bg-white shadow-lg rounded-lg max-w-md">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Generating your quiz questions...</p>
+          <h2 className="text-lg font-semibold text-gray-800 mb-2">
+            Generating your quiz questions...
+          </h2>
+          <p className="text-gray-600 mb-4">
+            This may take a moment as we create high-quality questions tailored
+            to your selected topics.
+          </p>
+
+          {quizSettings.model && (
+            <div className="text-sm font-medium bg-blue-50 text-blue-700 p-2 rounded-md mb-3">
+              Using{" "}
+              {quizSettings.model === "claude" ? "Claude AI" : "OpenAI GPT-4"}{" "}
+              for question generation
+            </div>
+          )}
+
+          <div className="text-sm text-gray-500 bg-gray-50 p-2 rounded-md">
+            <p>
+              Quiz questions are being generated based on your selected
+              preferences. New questions will be saved to our database for
+              future use.
+            </p>
+            <p className="mt-2 text-xs">
+              Note: AI generation may occasionally fail due to service limits.
+              The system will automatically retry or switch models if needed.
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -139,6 +200,7 @@ export default function QuizPage() {
               onAnswer={handleAnswer}
               showExplanation={!!quizState.userAnswers[question.id]}
               userAnswer={quizState.userAnswers[question.id]}
+              onFeedback={handleFeedback}
             />
           </div>
         ))}
@@ -187,6 +249,7 @@ export default function QuizPage() {
           onAnswer={handleAnswer}
           showExplanation={!!quizState.userAnswers[currentQuestion.id]}
           userAnswer={quizState.userAnswers[currentQuestion.id]}
+          onFeedback={handleFeedback}
         />
       )}
 

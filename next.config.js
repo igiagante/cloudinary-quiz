@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  experimental: {},
+  serverExternalPackages: [],
   webpack: (config, { isServer }) => {
     if (!isServer) {
       // Don't attempt to load these modules on the client side

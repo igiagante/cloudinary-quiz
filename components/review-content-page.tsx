@@ -10,6 +10,7 @@ interface ReviewPageProps {
   userAnswers: Record<string, string>;
   onNavigateBack: () => void;
   onFinishQuiz: () => void;
+  onFeedback?: (questionId: string, isHelpful: boolean) => void;
 }
 
 export default function ReviewPageContent({
@@ -17,6 +18,7 @@ export default function ReviewPageContent({
   userAnswers,
   onNavigateBack,
   onFinishQuiz,
+  onFeedback,
 }: ReviewPageProps) {
   const router = useRouter();
 
@@ -44,6 +46,7 @@ export default function ReviewPageContent({
             onAnswer={() => {}} // Read-only in review mode
             showExplanation={!!userAnswers[question.id]}
             userAnswer={userAnswers[question.id]}
+            onFeedback={onFeedback}
           />
         </div>
       ))}

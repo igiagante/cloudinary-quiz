@@ -5,35 +5,60 @@ EXCEPTION
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- CREATE TYPE "topic" AS ENUM('Cloudinary Basics', 'Image Optimization', 'Video Processing', 'Asset Management', 'Transformations', 'Upload API', 'Admin API', 'Security Features', 'Performance Optimization', 'SDKs and Integration');
+ CREATE TYPE "question_status" AS ENUM('active', 'review', 'deleted');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "source_model" AS ENUM('openai', 'claude', 'manual');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ CREATE TYPE "topic" AS ENUM('Products', 'Architecture', 'Lifecycle', 'Widgets', 'Assets', 'Transformations', 'Management', 'Access');
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "options" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"question_id" integer NOT NULL,
+	"question_id" text NOT NULL,
 	"text" text NOT NULL,
 	"is_correct" boolean NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "questions" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"uuid" varchar(36) NOT NULL,
+	"id" text PRIMARY KEY NOT NULL,
+	"uuid" uuid DEFAULT gen_random_uuid(),
 	"question" text NOT NULL,
+	"options" jsonb NOT NULL,
+	"correctAnswer" text NOT NULL,
 	"explanation" text NOT NULL,
-	"topic" "topic" NOT NULL,
-	"difficulty" "difficulty" NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL,
-	"updated_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "questions_uuid_unique" UNIQUE("uuid")
+	"topic" text NOT NULL,
+	"difficulty" text NOT NULL,
+	"source" text DEFAULT 'manual',
+	"topic_id" integer,
+	"point_value" real,
+	"status" text DEFAULT 'active' NOT NULL,
+	"deleted_at" timestamp,
+	"has_multiple_correct_answers" boolean DEFAULT false,
+	"correct_answers" text[],
+	"quality_score" real DEFAULT 0,
+	"usage_count" integer DEFAULT 0,
+	"positive_ratings" integer DEFAULT 0,
+	"feedback_count" integer DEFAULT 0,
+	"success_rate" real DEFAULT 0,
+	"created_at" timestamp DEFAULT now(),
+	"updated_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "quiz_questions" (
 	"id" serial PRIMARY KEY NOT NULL,
 	"quiz_id" integer NOT NULL,
-	"question_id" integer NOT NULL,
+	"question_id" text NOT NULL,
 	"user_answer" integer,
 	"is_correct" boolean,
 	"created_at" timestamp DEFAULT now() NOT NULL
@@ -60,6 +85,15 @@ CREATE TABLE IF NOT EXISTS "topic_performance" (
 	"total" integer NOT NULL,
 	"percentage" integer NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "topics" (
+	"id" integer PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"max_points" real NOT NULL,
+	"short_name" text NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "user_topic_performance" (
@@ -93,13 +127,13 @@ EXCEPTION
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "quiz_questions" ADD CONSTRAINT "quiz_questions_quiz_id_quizzes_id_fk" FOREIGN KEY ("quiz_id") REFERENCES "quizzes"("id") ON DELETE cascade ON UPDATE no action;
+ ALTER TABLE "quiz_questions" ADD CONSTRAINT "quiz_questions_quiz_id_quizzes_id_fk" FOREIGN KEY ("quiz_id") REFERENCES "quizzes"("id") ON DELETE no action ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "quiz_questions" ADD CONSTRAINT "quiz_questions_question_id_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "questions"("id") ON DELETE cascade ON UPDATE no action;
+ ALTER TABLE "quiz_questions" ADD CONSTRAINT "quiz_questions_question_id_questions_id_fk" FOREIGN KEY ("question_id") REFERENCES "questions"("id") ON DELETE no action ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;

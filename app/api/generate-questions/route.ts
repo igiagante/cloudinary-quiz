@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { questionRepository } from "@/lib/db/repositories/question.repository";
-import { CLOUDINARY_TOPIC_LIST } from "@/lib/cloudinary-topics";
-import { generateQuizQuestions } from "@/lib/quiz-generator";
+import {
+  questionRepository,
+  QuestionWithOptions,
+} from "@/lib/db/repositories/question.repository";
 import { Topic } from "@/types";
+import { generateQuizFast } from "@/lib/quiz-generator";
+import { setProgressCallback } from "@/lib/quiz-generator";
 
 // Define schema for structured output
 const questionSchema = z.object({
@@ -22,123 +25,139 @@ const questionsArraySchema = z.object({
 });
 
 // Input validation schema
-const generateQuestionsSchema = z.object({
+const GenerateSchema = z.object({
   numQuestions: z.number().min(1).max(30).default(10),
   topics: z.array(z.string()).optional(),
   difficulty: z.enum(["easy", "medium", "hard"]).optional(),
+  model: z.enum(["openai", "claude", "none"]).default("none"),
+  maxNewQuestions: z.number().min(1).max(10).default(3),
 });
 
+// Utility function to shuffle an array
+function shuffleArray<T>(array: T[]): T[] {
+  const newArray = [...array];
+  for (let i = newArray.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
+  }
+  return newArray;
+}
+
+// Utility function to format a question with shuffled options
+function formatQuestionWithShuffledOptions(q: QuestionWithOptions) {
+  // Skip questions with empty options
+  if (!q.options || !Array.isArray(q.options) || q.options.length < 2) {
+    console.error(
+      `ERROR: Question ${q.uuid} has invalid options - skipping question`
+    );
+    return null;
+  }
+
+  // Extract options with their correctness info
+  const optionsWithCorrectness = q.options.map((o) => ({
+    text: o.text,
+    isCorrect: o.isCorrect,
+  }));
+
+  // Shuffle the options
+  const shuffledOptions = shuffleArray(optionsWithCorrectness);
+
+  return {
+    id: q.uuid,
+    question: q.question,
+    options: shuffledOptions.map((o) => o.text),
+    correctAnswer: shuffledOptions.find((o) => o.isCorrect)?.text || "",
+    explanation: q.explanation,
+    topic: q.topic,
+    difficulty: q.difficulty,
+    source: q.source || "openai", // Include source information
+    status: q.status || "active", // Include status information
+    qualityScore: q.qualityScore || 0, // Include quality score
+  };
+}
+
 export async function POST(request: NextRequest) {
+  console.log("POST /api/generate-questions - Starting request");
+
   try {
     const body = await request.json();
+    console.log("Request body:", JSON.stringify(body));
 
-    const { numQuestions, topics, difficulty } =
-      generateQuestionsSchema.parse(body);
+    const {
+      numQuestions,
+      topics,
+      difficulty,
+      model,
+      maxNewQuestions = 3,
+    } = body;
 
-    // First, try to find existing questions in the database
-    const selectedTopics = topics || [];
-    let dbQuestions = [];
-
-    try {
-      if (selectedTopics.length > 0) {
-        // Get questions matching the specified topics and difficulty
-        dbQuestions = await questionRepository.getByTopicAndDifficulty(
-          selectedTopics,
-          difficulty,
-          numQuestions
-        );
-      } else {
-        // Get random questions
-        const allTopics = CLOUDINARY_TOPIC_LIST;
-        dbQuestions = await questionRepository.getByTopicAndDifficulty(
-          allTopics,
-          difficulty,
-          numQuestions
-        );
-      }
-    } catch (dbError) {
-      console.error("Database error:", dbError);
+    // Validate inputs
+    if (!numQuestions || typeof numQuestions !== "number" || numQuestions < 1) {
+      console.error("Invalid numQuestions:", numQuestions);
       return NextResponse.json(
-        { error: "Database error: " + (dbError as Error).message },
-        { status: 500 }
+        { error: "Invalid number of questions" },
+        { status: 400 }
       );
     }
 
-    // If we have enough questions from the database, return them
-    if (dbQuestions.length >= numQuestions) {
-      const formattedQuestions = dbQuestions
-        .slice(0, numQuestions)
-        .map((q) => ({
-          id: q.uuid,
-          question: q.question,
-          options: q.options.map((o) => o.text),
-          correctAnswer: q.options.find((o) => o.isCorrect)?.text || "",
-          explanation: q.explanation,
-          topic: q.topic,
-          difficulty: q.difficulty,
-        }));
+    // Determine which model to use for generation
+    const useModel = model === "none" ? "none" : model;
 
-      return NextResponse.json({ questions: formattedQuestions });
-    }
+    // Collection for progress logs
+    const progressLogs: string[] = [];
 
-    // If we don't have enough questions, generate more
-    const questionsToGenerate = numQuestions - dbQuestions.length;
-    console.log(`Generating ${questionsToGenerate} new questions`);
+    // Set up progress callback to capture progress
+    setProgressCallback((message) => {
+      progressLogs.push(message);
+      console.log("Progress:", message);
+    });
 
-    const generatedQuestions = await generateQuizQuestions(
-      questionsToGenerate,
-      selectedTopics.length > 0
-        ? (selectedTopics as Topic[])
-        : CLOUDINARY_TOPIC_LIST,
-      difficulty
+    console.log(
+      `Generating quiz with: numQuestions=${numQuestions}, topics=${JSON.stringify(
+        topics
+      )}, difficulty=${difficulty}, useModel=${useModel}, maxNewQuestions=${maxNewQuestions}`
     );
 
-    // Save the generated questions to the database
-    for (const question of generatedQuestions) {
-      try {
-        const correctAnswerIndex = question.options.findIndex(
-          (opt) => opt === question.correctAnswer
+    try {
+      // Generate questions using the fast generator with the updated parameters
+      const questions = await generateQuizFast(
+        numQuestions,
+        topics as Topic[],
+        difficulty as "easy" | "medium" | "hard",
+        true, // Always allow generation in the API
+        useModel,
+        maxNewQuestions
+      );
+
+      console.log(`Generated ${questions.length} questions successfully`);
+
+      if (!questions || !Array.isArray(questions) || questions.length === 0) {
+        console.error("No valid questions returned:", questions);
+        return NextResponse.json(
+          { error: "No questions were generated. Please try again." },
+          { status: 500 }
         );
-
-        if (correctAnswerIndex === -1) {
-          console.error("Could not find correct answer in options", question);
-          continue;
-        }
-
-        await questionRepository.create({
-          question: question.question,
-          explanation: question.explanation,
-          topic: question.topic,
-          difficulty: question.difficulty || "medium",
-          options: question.options.map((opt, index) => ({
-            text: opt,
-            isCorrect: index === correctAnswerIndex,
-          })),
-        });
-      } catch (error) {
-        console.error("Error saving question to database:", error);
       }
+
+      // Return both questions and progress logs
+      return NextResponse.json({ questions, progressLogs });
+    } catch (generateError) {
+      console.error("Error in generateQuizFast:", generateError);
+      throw generateError;
     }
-
-    // Combine database questions with newly generated ones
-    const allQuestions = [
-      ...dbQuestions.map((q) => ({
-        id: q.uuid,
-        question: q.question,
-        options: q.options.map((o) => o.text),
-        correctAnswer: q.options.find((o) => o.isCorrect)?.text || "",
-        explanation: q.explanation,
-        topic: q.topic,
-        difficulty: q.difficulty,
-      })),
-      ...generatedQuestions,
-    ].slice(0, numQuestions);
-
-    return NextResponse.json({ questions: allQuestions });
   } catch (error) {
     console.error("Error generating questions:", error);
+    if (error instanceof Error) {
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+    }
     return NextResponse.json(
-      { error: "Failed to generate questions" },
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to generate questions",
+      },
       { status: 500 }
     );
   }
@@ -150,6 +169,8 @@ export async function GET(request: NextRequest) {
     const topic = searchParams.get("topic");
     const difficulty = searchParams.get("difficulty");
     const limit = parseInt(searchParams.get("limit") || "10");
+    const status = searchParams.get("status") || "active"; // Default to active questions
+    const includeDeleted = searchParams.get("includeDeleted") === "true";
 
     let questions;
 
@@ -157,22 +178,21 @@ export async function GET(request: NextRequest) {
       questions = await questionRepository.getByTopicAndDifficulty(
         [topic],
         difficulty || undefined,
-        limit
+        limit,
+        status as string
       );
-    } else {
-      questions = await questionRepository.getAll();
+    } else if (includeDeleted) {
+      // Get all questions including deleted ones
+      questions = await questionRepository.getAll(true);
       questions = questions.slice(0, limit);
+    } else {
+      // Get only active questions by default
+      questions = await questionRepository.getByStatus(status as any, limit);
     }
 
-    const formattedQuestions = questions.map((q) => ({
-      id: q.uuid,
-      question: q.question,
-      options: q.options.map((o) => o.text),
-      correctAnswer: q.options.find((o) => o.isCorrect)?.text || "",
-      explanation: q.explanation,
-      topic: q.topic,
-      difficulty: q.difficulty,
-    }));
+    const formattedQuestions = questions
+      .map((q) => formatQuestionWithShuffledOptions(q))
+      .filter((q) => q !== null);
 
     return NextResponse.json({ questions: formattedQuestions });
   } catch (error) {

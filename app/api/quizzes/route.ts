@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create a new quiz with the selected questions
-    const questionIds = questions.map((q) => q.id);
+    const questionIds = questions.map((q) => q.id.toString());
     const quizId = await quizRepository.create({
       userId: userIdStr,
       numQuestions,

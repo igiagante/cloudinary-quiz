@@ -3,10 +3,11 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { CLOUDINARY_TOPIC_LIST } from "@/lib/cloudinary-topics";
+import { cloudinaryTopicList } from "@/types/constants";
 import { Topic } from "@/types";
 import { questionRepository } from "@/lib/db/repositories/question.repository";
 import AdminLink from "@/components/admin-link";
+import { v4 as uuidv4 } from "uuid";
 
 export default function Home() {
   const router = useRouter();
@@ -15,11 +16,15 @@ export default function Home() {
   const [difficulty, setDifficulty] = useState<
     "easy" | "medium" | "hard" | "mixed"
   >("mixed");
+  const [model, setModel] = useState<"openai" | "claude" | "none">("none");
+  const [forceGenerate, setForceGenerate] = useState(false);
+  const [maxNewQuestions, setMaxNewQuestions] = useState(3);
   const [isLoading, setIsLoading] = useState(false);
   const [dbStats, setDbStats] = useState<{ totalQuestions: number } | null>(
     null
   );
   const [error, setError] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -52,75 +57,136 @@ export default function Home() {
   };
 
   const handleStartQuiz = async () => {
-    if (isLoading) return;
-    setIsLoading(true);
+    if (isGenerating) return;
+    setIsGenerating(true);
     setError(null);
 
+    // Initialize progress tracking
+    const progressEl = document.getElementById("generation-progress");
+    const updateProgress = (message: string) => {
+      if (progressEl) {
+        progressEl.innerHTML += `<div>${message}</div>`;
+        progressEl.scrollTop = progressEl.scrollHeight;
+      }
+    };
+
     try {
-      // First, create an anonymous user if one doesn't exist
-      let userId = localStorage.getItem("userId");
-      if (!userId) {
-        const userResponse = await fetch("/api/users/anonymous", {
-          method: "POST",
-        });
-        if (!userResponse.ok) {
-          throw new Error("Failed to create anonymous user");
-        }
-        const userData = await userResponse.json();
-        userId = userData.userId;
-        if (!userId) {
-          throw new Error("No user ID returned from server");
-        }
+      // Create anonymous user if none exists
+      if (!localStorage.getItem("userId")) {
+        updateProgress("Creating anonymous user profile...");
+        const userId = uuidv4();
         localStorage.setItem("userId", userId);
       }
 
-      const payload = {
-        numQuestions,
+      // Save quiz settings to localStorage
+      updateProgress("Saving quiz settings...");
+      localStorage.setItem(
+        "quizSettings",
+        JSON.stringify({
+          numQuestions,
+          topics: selectedTopics,
+          difficulty,
+          model,
+          maxNewQuestions,
+          forceGenerate,
+        })
+      );
+
+      // Show more details about what's happening
+      updateProgress(
+        `Preparing to generate ${numQuestions} ${difficulty} questions on: ${selectedTopics.join(
+          ", "
+        )}`
+      );
+
+      // Fetch generated questions
+      updateProgress("Sending request to generate questions...");
+
+      // Create a clean, properly typed request body
+      const requestBody = {
+        numQuestions: Number(numQuestions),
         topics: selectedTopics.length > 0 ? selectedTopics : undefined,
         difficulty: difficulty === "mixed" ? undefined : difficulty,
+        model,
+        maxNewQuestions,
       };
+
+      console.log("Sending request with body:", JSON.stringify(requestBody));
 
       const response = await fetch("/api/generate-questions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(requestBody),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || "Failed to generate quiz");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate questions");
       }
 
-      if (!data.questions || data.questions.length === 0) {
+      const data = await response.json();
+      const questions = data.questions;
+      const progressLogs = data.progressLogs || [];
+
+      // Display any progress logs we received from the server
+      if (progressLogs && progressLogs.length > 0) {
+        progressLogs.forEach((log: string) => updateProgress(log));
+      }
+
+      // Debug any issues with questions
+      if (!questions || questions.length === 0) {
+        updateProgress(
+          "Warning: No questions were generated. Please try again."
+        );
+        console.error("No questions generated:", data);
         throw new Error("No questions were generated");
       }
 
-      try {
-        const quizState = {
-          questions: data.questions,
-          currentQuestionIndex: 0,
-          userAnswers: {},
-          isComplete: false,
-        };
-        localStorage.setItem("quizState", JSON.stringify(quizState));
-      } catch (storageError) {
-        console.error("Failed to save quiz state:", storageError);
-        throw new Error(
-          "Failed to save quiz state. Please check browser storage settings."
+      // Log the structure of the first question to debug any issues
+      console.log(
+        "First question structure:",
+        JSON.stringify(questions[0], null, 2)
+      );
+
+      // Check if the question has options and they're properly formatted
+      if (
+        !questions[0].options ||
+        !Array.isArray(questions[0].options) ||
+        questions[0].options.length === 0
+      ) {
+        updateProgress(
+          "Warning: Questions were generated but appear to be missing options."
         );
+        console.error("Question missing options:", questions[0]);
       }
 
+      updateProgress("Quiz generation successful! Preparing your quiz...");
+
+      // Add the questions to the quiz state
+      const quizState = {
+        questions,
+        currentQuestionIndex: 0,
+        userAnswers: {},
+        isComplete: false,
+      };
+
+      // Save the quiz state to localStorage
+      localStorage.setItem("quizState", JSON.stringify(quizState));
+
+      // Navigate to the quiz page
       router.push("/quiz");
     } catch (error) {
-      console.error("Error starting quiz:", error);
-      setError(
-        error instanceof Error ? error.message : "Failed to generate quiz"
+      console.error("Error generating quiz:", error);
+      updateProgress(
+        `Error: ${
+          error instanceof Error ? error.message : "Something went wrong"
+        }`
       );
-    } finally {
-      setIsLoading(false);
+      setTimeout(() => {
+        setIsGenerating(false);
+      }, 3000);
     }
   };
 
@@ -149,9 +215,48 @@ export default function Home() {
       <div className="bg-white rounded-lg shadow-md p-6 mb-8">
         <h2 className="text-xl font-semibold mb-4">Quiz Settings</h2>
 
+        {isGenerating && (
+          <div className="mb-6 p-4 bg-blue-50 rounded-md border border-blue-100">
+            <h3 className="text-sm font-medium text-blue-800 mb-2 flex items-center">
+              <svg
+                className="animate-spin -ml-1 mr-2 h-4 w-4 text-blue-600"
+                xmlns="http://www.w3.org/2000/svg"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                ></circle>
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                ></path>
+              </svg>
+              Generating Quiz
+            </h3>
+            <div
+              id="generation-progress"
+              className="text-xs text-blue-700 bg-blue-100 p-3 rounded max-h-40 overflow-y-auto"
+            >
+              <p>Initializing quiz generation...</p>
+            </div>
+            <p className="text-xs text-blue-600 mt-2">
+              Using database-cached questions where available for faster
+              generation. AI models will only be used for new topics or when
+              cached questions aren't available.
+            </p>
+          </div>
+        )}
+
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Number of Questions
+            Number of Questions: {numQuestions}
           </label>
           <input
             type="range"
@@ -160,9 +265,9 @@ export default function Home() {
             step="5"
             value={numQuestions}
             onChange={handleSliderChange}
-            className="w-full"
+            className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
           />
-          <div className="flex justify-between text-sm text-gray-500">
+          <div className="flex justify-between text-xs text-gray-500 mt-1">
             <span>5</span>
             <span>10</span>
             <span>15</span>
@@ -170,77 +275,178 @@ export default function Home() {
             <span>25</span>
             <span>30</span>
           </div>
-          <p className="mt-1 text-sm text-gray-500">
-            Selected: {numQuestions} questions
-          </p>
         </div>
 
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Difficulty Level
+            Select Topics:
           </label>
-          <div className="grid grid-cols-4 gap-2">
-            {["easy", "medium", "hard", "mixed"].map((level) => (
-              <button
-                key={level}
-                onClick={() => setDifficulty(level as any)}
-                className={`py-2 px-4 rounded-md text-sm font-medium ${
-                  difficulty === level
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-800 hover:bg-gray-200"
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {cloudinaryTopicList.map((topic) => (
+              <div
+                key={topic}
+                onClick={() => handleTopicToggle(topic)}
+                className={`cursor-pointer p-3 rounded border ${
+                  selectedTopics.includes(topic)
+                    ? "bg-blue-100 border-blue-300"
+                    : "bg-gray-50 border-gray-200 hover:bg-gray-100"
                 }`}
               >
-                {level.charAt(0).toUpperCase() + level.slice(1)}
+                <div className="text-sm font-medium">{topic}</div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 text-sm text-gray-500">
+            {selectedTopics.length === 0
+              ? "No topics selected (all topics will be used)"
+              : `${selectedTopics.length} topics selected`}
+          </div>
+        </div>
+
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Difficulty:
+          </label>
+          <div className="flex space-x-2">
+            {["easy", "medium", "hard", "mixed"].map((diff) => (
+              <button
+                key={diff}
+                onClick={() =>
+                  setDifficulty(diff as "easy" | "medium" | "hard" | "mixed")
+                }
+                className={`px-3 py-1 rounded-full text-sm ${
+                  difficulty === diff
+                    ? "bg-blue-100 text-blue-700 border border-blue-300"
+                    : "bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200"
+                }`}
+              >
+                {diff.charAt(0).toUpperCase() + diff.slice(1)}
               </button>
             ))}
           </div>
         </div>
 
         <div className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Topics{" "}
-            {selectedTopics.length > 0 && `(${selectedTopics.length} selected)`}
-          </label>
-          <p className="mt-1 mb-3 text-sm text-gray-500">
-            {selectedTopics.length === 0
-              ? "All topics will be included randomly"
-              : "Only selected topics will be included"}
-          </p>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {CLOUDINARY_TOPIC_LIST.map((topic) => (
+          <div className="flex items-center justify-between">
+            <label className="block text-sm font-medium text-gray-700">
+              Question Source
+            </label>
+          </div>
+          <div className="mt-2 bg-gray-50 p-4 rounded-md border border-gray-200">
+            <div className="flex flex-col space-y-3">
               <div
-                key={topic}
-                onClick={() => handleTopicToggle(topic)}
-                className={`p-3 rounded-md cursor-pointer border ${
-                  selectedTopics.includes(topic)
-                    ? "border-blue-500 bg-blue-50"
-                    : "border-gray-200 hover:border-gray-300"
+                onClick={() => setModel("none")}
+                className={`flex items-center cursor-pointer p-2 rounded ${
+                  model === "none" ? "bg-blue-50 border border-blue-200" : ""
                 }`}
               >
-                <div className="flex items-start">
-                  <div
-                    className={`w-5 h-5 flex items-center justify-center rounded-sm mr-2 ${
-                      selectedTopics.includes(topic)
-                        ? "bg-blue-500 text-white"
-                        : "border border-gray-300"
-                    }`}
-                  >
-                    {selectedTopics.includes(topic) && "✓"}
-                  </div>
-                  <span className="text-sm">{topic}</span>
+                <input
+                  type="radio"
+                  checked={model === "none"}
+                  onChange={() => setModel("none")}
+                  className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                />
+                <div className="ml-3">
+                  <span className="text-sm font-medium text-gray-700">
+                    Database Only
+                  </span>
+                  <p className="text-xs text-gray-500">
+                    Use existing high-quality questions from database (fastest)
+                  </p>
                 </div>
               </div>
-            ))}
+
+              <div
+                onClick={() => setModel("claude")}
+                className={`flex items-center cursor-pointer p-2 rounded ${
+                  model === "claude" ? "bg-blue-50 border border-blue-200" : ""
+                }`}
+              >
+                <input
+                  type="radio"
+                  checked={model === "claude"}
+                  onChange={() => setModel("claude")}
+                  className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                />
+                <div className="ml-3">
+                  <span className="text-sm font-medium text-gray-700">
+                    Database + Claude
+                  </span>
+                  <p className="text-xs text-gray-500">
+                    Use database questions and generate additional ones with
+                    Claude if needed
+                  </p>
+                </div>
+              </div>
+
+              <div
+                onClick={() => setModel("openai")}
+                className={`flex items-center cursor-pointer p-2 rounded ${
+                  model === "openai" ? "bg-blue-50 border border-blue-200" : ""
+                }`}
+              >
+                <input
+                  type="radio"
+                  checked={model === "openai"}
+                  onChange={() => setModel("openai")}
+                  className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                />
+                <div className="ml-3">
+                  <span className="text-sm font-medium text-gray-700">
+                    Database + OpenAI
+                  </span>
+                  <p className="text-xs text-gray-500">
+                    Use database questions and generate additional ones with
+                    OpenAI if needed
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
+          <p className="text-xs text-gray-500 mt-2">
+            Note: Database questions are already high-quality, realistic
+            questions created using Claude.
+          </p>
         </div>
+
+        {model !== "none" && (
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Maximum New Questions to Generate: {maxNewQuestions}
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="5"
+              step="1"
+              value={maxNewQuestions}
+              onChange={(e) => setMaxNewQuestions(Number(e.target.value))}
+              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+            />
+            <div className="flex justify-between text-xs text-gray-500 mt-1">
+              <span>1</span>
+              <span>2</span>
+              <span>3</span>
+              <span>4</span>
+              <span>5</span>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Limit how many new questions to generate (lower numbers are
+              faster)
+            </p>
+          </div>
+        )}
 
         <button
           onClick={handleStartQuiz}
-          disabled={isLoading}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+          disabled={isGenerating}
+          className={`w-full py-2 px-4 rounded-md ${
+            isGenerating
+              ? "bg-gray-300 cursor-not-allowed"
+              : "bg-blue-600 hover:bg-blue-700 text-white"
+          } font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
         >
-          {isLoading ? "Generating Quiz..." : "Start Quiz"}
+          {isGenerating ? "Generating..." : "Start Quiz"}
         </button>
       </div>
 

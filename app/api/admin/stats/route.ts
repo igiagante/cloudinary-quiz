@@ -1,6 +1,5 @@
 // app/api/admin/stats/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { questionRepository } from "@/lib/db/repositories/question.repository";
 import { quizRepository } from "@/lib/db/repositories/quiz.repository";
 
 export async function GET(request: NextRequest) {

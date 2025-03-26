@@ -1,5 +1,5 @@
 {
-  "id": "405d337d-e47f-4abc-b690-5d2ddf611548",
+  "id": "e0380280-29d0-4a2b-9b11-9aed5cea5d78",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "5",
   "dialect": "pg",
@@ -16,7 +16,7 @@
         },
         "question_id": {
           "name": "question_id",
-          "type": "integer",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -65,18 +65,31 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "text",
           "primaryKey": true,
           "notNull": true
         },
         "uuid": {
           "name": "uuid",
-          "type": "varchar(36)",
+          "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false,
+          "default": "gen_random_uuid()"
         },
         "question": {
           "name": "question",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "options": {
+          "name": "options",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "correctAnswer": {
+          "name": "correctAnswer",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -89,43 +102,115 @@
         },
         "topic": {
           "name": "topic",
-          "type": "topic",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
         "difficulty": {
           "name": "difficulty",
-          "type": "difficulty",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'manual'"
+        },
+        "topic_id": {
+          "name": "topic_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "point_value": {
+          "name": "point_value",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "has_multiple_correct_answers": {
+          "name": "has_multiple_correct_answers",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "default": false
+        },
+        "correct_answers": {
+          "name": "correct_answers",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "quality_score": {
+          "name": "quality_score",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "usage_count": {
+          "name": "usage_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "positive_ratings": {
+          "name": "positive_ratings",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "feedback_count": {
+          "name": "feedback_count",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
+        },
+        "success_rate": {
+          "name": "success_rate",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": false,
+          "default": 0
         },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "default": "now()"
         },
         "updated_at": {
           "name": "updated_at",
           "type": "timestamp",
           "primaryKey": false,
-          "notNull": true,
+          "notNull": false,
           "default": "now()"
         }
       },
       "indexes": {},
       "foreignKeys": {},
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "questions_uuid_unique": {
-          "name": "questions_uuid_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "uuid"
-          ]
-        }
-      }
+      "uniqueConstraints": {}
     },
     "quiz_questions": {
       "name": "quiz_questions",
@@ -145,7 +230,7 @@
         },
         "question_id": {
           "name": "question_id",
-          "type": "integer",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -181,7 +266,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "quiz_questions_question_id_questions_id_fk": {
@@ -194,7 +279,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "no action",
           "onUpdate": "no action"
         },
         "quiz_questions_user_answer_options_id_fk": {
@@ -370,6 +455,54 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {}
     },
+    "topics": {
+      "name": "topics",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "max_points": {
+          "name": "max_points",
+          "type": "real",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "short_name": {
+          "name": "short_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
     "user_topic_performance": {
       "name": "user_topic_performance",
       "schema": "",
@@ -529,19 +662,33 @@
         "hard": "hard"
       }
     },
+    "question_status": {
+      "name": "question_status",
+      "values": {
+        "active": "active",
+        "review": "review",
+        "deleted": "deleted"
+      }
+    },
+    "source_model": {
+      "name": "source_model",
+      "values": {
+        "openai": "openai",
+        "claude": "claude",
+        "manual": "manual"
+      }
+    },
     "topic": {
       "name": "topic",
       "values": {
-        "Cloudinary Basics": "Cloudinary Basics",
-        "Image Optimization": "Image Optimization",
-        "Video Processing": "Video Processing",
-        "Asset Management": "Asset Management",
+        "Products": "Products",
+        "Architecture": "Architecture",
+        "Lifecycle": "Lifecycle",
+        "Widgets": "Widgets",
+        "Assets": "Assets",
         "Transformations": "Transformations",
-        "Upload API": "Upload API",
-        "Admin API": "Admin API",
-        "Security Features": "Security Features",
-        "Performance Optimization": "Performance Optimization",
-        "SDKs and Integration": "SDKs and Integration"
+        "Management": "Management",
+        "Access": "Access"
       }
     }
   },

@@ -64,6 +64,39 @@ The Cloudinary Certification exam requires an 80% passing score, testing your kn
 
 5. Open [http://localhost:3000](http://localhost:3000) in your browser
 
+## ✅ Testing
+
+The app includes a Jest-based test suite to ensure its functionality works as expected:
+
+### Running Tests
+
+1. Run all tests:
+
+   ```bash
+   npm test
+   ```
+
+2. Run tests in watch mode (for development):
+
+   ```bash
+   npm run test:watch
+   ```
+
+3. Run tests with coverage report:
+
+   ```bash
+   npm run test:coverage
+   ```
+
+4. Run specific test suites:
+
+   ```bash
+   # Run quiz-seeder tests
+   npm run test:quiz-seeder
+   ```
+
+5. Create new tests in `__tests__` directories following the existing patterns
+
 ## 📚 Topics Covered
 
 The quiz covers all key areas of the Cloudinary certification exam:
@@ -105,6 +138,7 @@ This app uses the OpenAI API to generate high-quality quiz questions that:
 - **OpenAI API**: Powers the question generation
 - **TypeScript**: For type safety and better developer experience
 - **localStorage**: For persisting quiz state between sessions
+- **Jest**: For testing components and utilities
 
 ## 📊 Performance Tracking
 

@@ -1,31 +1,35 @@
 // types/index.ts
+import { DifficultyLevel, QuestionSource } from "./constants";
+import { TopicScore } from "@/lib/types";
 
 export type Topic =
-  | "Cloudinary Basics"
-  | "Image Optimization"
-  | "Video Processing"
-  | "Asset Management"
+  | "Products, Value, Environment Settings, and Implementation Strategies"
+  | "System Architecture"
+  | "Media Lifecycle Strategy and Emerging Trends"
+  | "Widgets, Out of Box Add-ons, Custom Integrations"
+  | "Upload and Migrate Assets"
   | "Transformations"
-  | "Upload API"
-  | "Admin API"
-  | "Security Features"
-  | "Performance Optimization"
-  | "SDKs and Integration";
+  | "Media Management"
+  | "User, Role, and Group Management and Access Controls";
 
 export interface QuizQuestion {
   id: string;
   question: string;
   options: string[];
   correctAnswer: string;
+  correctAnswers?: string[];
+  hasMultipleCorrectAnswers?: boolean;
   explanation: string;
   topic: Topic;
-  difficulty: "easy" | "medium" | "hard";
+  difficulty: DifficultyLevel;
+  source?: QuestionSource;
+  qualityScore?: number;
 }
 
 export interface QuizState {
   questions: QuizQuestion[];
   currentQuestionIndex: number;
-  userAnswers: Record<string, string>;
+  userAnswers: Record<string, string | string[]>;
   isComplete: boolean;
 }
 
@@ -46,4 +50,5 @@ export interface QuizResults {
   topicBreakdown: TopicPerformance[];
   improvementAreas: Topic[];
   strengths: Topic[];
+  topicScores?: TopicScore[];
 }
