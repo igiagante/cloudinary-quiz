@@ -56,10 +56,16 @@ export async function generateQuizReport(
   userAnswers: Record<string, string | string[]>,
   userId?: string // Optional user ID for tracking
 ): Promise<QuizResults & { quizId: string }> {
+  console.log("Generate Quiz Report started");
+  console.log(`Question count: ${quizQuestionsList.length}`);
+  console.log(`User answers: ${Object.keys(userAnswers).length}`);
+  console.log(`User ID: ${userId || "anonymous"}`);
+
   const analysis = analyzeQuizResults(quizQuestionsList, userAnswers);
 
   try {
     return await db.transaction(async (tx: typeof db) => {
+      console.log("Starting database transaction for quiz report");
       // Run initial queries in parallel
       const [userResult, dbQuestions] = await Promise.all([
         // User lookup
@@ -83,6 +89,9 @@ export async function generateQuizReport(
           ),
       ]);
 
+      console.log(`Found user record: ${userResult.length > 0}`);
+      console.log(`Found ${dbQuestions.length} question records in database`);
+
       // Process user and get options in parallel
       const [quiz, allOptions] = await Promise.all([
         // Handle user creation if needed
@@ -99,7 +108,21 @@ export async function generateQuizReport(
             completedAt: new Date(),
           })
           .returning()
-          .then(([quiz]: [DbQuiz]) => quiz),
+          .then(([quiz]: [DbQuiz]) => {
+            console.log(
+              `Created new quiz with ID: ${quiz.id}, UUID: ${quiz.uuid}`
+            );
+            // Store quiz ID in localStorage for future reference
+            if (typeof window !== "undefined") {
+              try {
+                localStorage.setItem("quizId", quiz.uuid);
+                console.log(`Saved quiz UUID ${quiz.uuid} to localStorage`);
+              } catch (e) {
+                console.error("Failed to save quiz ID to localStorage:", e);
+              }
+            }
+            return quiz;
+          }),
 
         // Fetch options
         tx
@@ -117,11 +140,16 @@ export async function generateQuizReport(
           ),
       ]);
 
+      console.log(`Found ${allOptions.length} options in database`);
+
       // 3. Prepare all question mappings in advance
       const mappedQuestions = await mapFrontendQuizToDb(
         quizQuestionsList,
         userAnswers,
         quiz.uuid
+      );
+      console.log(
+        `Mapped ${mappedQuestions.length} questions for database saving`
       );
 
       if (mappedQuestions.length > 0) {
@@ -156,9 +184,16 @@ export async function generateQuizReport(
           })
           .filter((q): q is NonNullable<typeof q> => q !== null);
 
+        console.log(
+          `Prepared ${quizQuestionsToInsert.length} quiz questions for insertion`
+        );
+
         // Batch insert all quiz questions at once
         if (quizQuestionsToInsert.length > 0) {
           await tx.insert(quizQuestions).values(quizQuestionsToInsert);
+          console.log(
+            `Inserted ${quizQuestionsToInsert.length} quiz questions into database`
+          );
         }
       }
 
@@ -170,7 +205,7 @@ export async function generateQuizReport(
           .filter(([_, data]) => data && data.total > 0)
           .map(([topic, data]) => ({
             quizId: quiz.id,
-            topic: topic as any,
+            topic: mapToValidTopic(topic) as any,
             correct: data.correct,
             total: data.total,
             percentage: Math.round(data.percentage),
@@ -178,7 +213,18 @@ export async function generateQuizReport(
           }));
 
         if (topicPerformanceToInsert.length > 0) {
-          await tx.insert(topicPerformance).values(topicPerformanceToInsert);
+          try {
+            await tx.insert(topicPerformance).values(topicPerformanceToInsert);
+            console.log(
+              `Inserted ${topicPerformanceToInsert.length} topic performance records`
+            );
+          } catch (error) {
+            console.error(
+              "Error inserting topic performance - continuing anyway:",
+              error
+            );
+            // Continue execution even if topic performance fails
+          }
         }
       }
 
@@ -192,6 +238,7 @@ export async function generateQuizReport(
           });
       }
 
+      console.log("Quiz report generation completed successfully");
       // Return the results with the quiz ID
       return {
         ...analysis,
@@ -206,6 +253,7 @@ export async function generateQuizReport(
     });
   } catch (error) {
     // If database saving fails, still return the analysis results
+    console.error("Error saving quiz to database:", error);
     return {
       ...analysis,
       quizId: "error-saving",
@@ -332,4 +380,20 @@ export function generateReport(results: QuizResults): string {
   }
 
   return report;
+}
+
+// Add a function to map topics to valid enum values
+function mapToValidTopic(topic: string): string {
+  // Map to strip out commas and map to closest valid topic
+  if (topic.includes("Products")) return "Products";
+  if (topic.includes("Architecture")) return "Architecture";
+  if (topic.includes("Lifecycle")) return "Lifecycle";
+  if (topic.includes("Widgets")) return "Widgets";
+  if (topic.includes("Assets")) return "Assets";
+  if (topic.includes("Transformations")) return "Transformations";
+  if (topic.includes("Management")) return "Management";
+  if (topic.includes("Access")) return "Access";
+
+  // Default fallback
+  return "Products";
 }

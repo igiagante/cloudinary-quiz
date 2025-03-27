@@ -14,7 +14,10 @@
     "db:pull": "drizzle-kit pull",
     "db:generate": "drizzle-kit generate:pg",
     "db:setup": "npx tsx lib/db/scripts/modules/cli.ts workflow",
-    "db:seed-quizzes": "npx tsx lib/db/scripts/modules/quiz-seeder.ts"
+    "db:seed-quizzes": "npx tsx lib/db/scripts/modules/quiz-seeder.ts",
+    "delete-all-quizzes": "NODE_ENV=development node -r dotenv/config --import=tsx lib/db/scripts/delete-all-quizzes.ts dotenv_config_path=.env.local",
+    "fix-multi-answers": "NODE_ENV=development node -r dotenv/config --import=tsx lib/db/scripts/fix-multiple-answer-questions.ts dotenv_config_path=.env.local",
+    "verify-multi-answers": "NODE_ENV=development node -r dotenv/config --import=tsx lib/db/scripts/verify-multi-answer-questions.ts dotenv_config_path=.env.local"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",

@@ -5,7 +5,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import QuizCard from "@/components/quiz-card";
 import QuizProgress from "@/components/quiz-progress";
-import { QuizState } from "@/types";
+import { QuizState, QuizQuestion } from "@/types";
 
 export default function QuizPage() {
   const router = useRouter();
@@ -22,6 +22,9 @@ export default function QuizPage() {
     model?: "openai" | "claude";
     topics?: string[];
   }>({});
+  const [multiAnswerSubmitted, setMultiAnswerSubmitted] = useState<
+    Record<string, boolean>
+  >({});
 
   const currentQuestion = quizState.questions[quizState.currentQuestionIndex];
 
@@ -88,17 +91,39 @@ export default function QuizPage() {
 
   const handleNext = () => {
     if (quizState.currentQuestionIndex === quizState.questions.length - 1) {
+      // Quiz is complete, update state
       setQuizState((prev) => ({
         ...prev,
         isComplete: true,
       }));
 
       // Save quiz state to localStorage
-      localStorage.setItem("quizState", JSON.stringify(quizState));
+      const completedQuizState = {
+        ...quizState,
+        isComplete: true,
+      };
+      localStorage.setItem("quizState", JSON.stringify(completedQuizState));
 
-      // Navigate to results page
-      router.push("/results");
+      // Save the quiz to the database
+      saveQuizToDatabase(completedQuizState)
+        .then(() => {
+          // Navigate to results page after successful save
+          router.push("/results");
+        })
+        .catch((error) => {
+          console.error("Error saving quiz:", error);
+          // Still navigate to results even if save fails
+          router.push("/results");
+        });
     } else {
+      // Reset multi-answer submitted state for the next question
+      const nextQuestionId =
+        quizState.questions[quizState.currentQuestionIndex + 1].id;
+      setMultiAnswerSubmitted((prev) => ({
+        ...prev,
+        [nextQuestionId]: false,
+      }));
+
       setQuizState((prev) => ({
         ...prev,
         currentQuestionIndex: prev.currentQuestionIndex + 1,
@@ -106,8 +131,107 @@ export default function QuizPage() {
     }
   };
 
+  // Function to save quiz to database
+  async function saveQuizToDatabase(quizState: {
+    questions: QuizQuestion[];
+    userAnswers: Record<string, string | string[]>;
+    currentQuestionIndex: number;
+    isComplete: boolean;
+  }) {
+    try {
+      // Get user ID from localStorage
+      const userId = localStorage.getItem("userId");
+      if (!userId) {
+        throw new Error("User ID not found");
+      }
+
+      // Prepare the quiz answers data
+      let quizId = localStorage.getItem("quizId");
+
+      // If no quiz ID, create a new quiz first
+      if (!quizId) {
+        console.log("No quiz ID found, creating new quiz in database");
+
+        // Create a new quiz in the database
+        const createQuizResponse = await fetch("/api/quizzes", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            userId,
+            numQuestions: quizState.questions.length,
+            questionIds: quizState.questions.map((q: QuizQuestion) => q.id),
+          }),
+        });
+
+        if (!createQuizResponse.ok) {
+          console.error(
+            "Failed to create quiz:",
+            await createQuizResponse.text()
+          );
+          throw new Error("Failed to create quiz");
+        }
+
+        const quizData = await createQuizResponse.json();
+        quizId = quizData.quizId;
+
+        // Save the quiz ID to localStorage for future use
+        localStorage.setItem("quizId", quizId as string);
+        console.log("Created new quiz with ID:", quizId);
+      }
+
+      const answers = Object.entries(quizState.userAnswers).map(
+        ([questionId, answer]) => ({
+          questionId,
+          answer: Array.isArray(answer) ? answer : [answer],
+        })
+      );
+
+      // Verify that quizId exists after our creation attempt
+      if (!quizId) {
+        throw new Error("Failed to obtain quiz ID");
+      }
+
+      // TypeScript type narrowing - quizId is now definitely a string
+      const finalQuizId: string = quizId;
+
+      // Call API to save the quiz
+      const response = await fetch("/api/quizzes/answers", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          quizId: finalQuizId,
+          userId,
+          answers,
+          isComplete: true,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("Failed to save quiz answers:", await response.text());
+        throw new Error("Failed to save quiz");
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error saving quiz:", error);
+      throw error;
+    }
+  }
+
   const handlePrevious = () => {
     if (quizState.currentQuestionIndex > 0) {
+      // Reset multi-answer submitted state for the previous question
+      const prevQuestionId =
+        quizState.questions[quizState.currentQuestionIndex - 1].id;
+      setMultiAnswerSubmitted((prev) => ({
+        ...prev,
+        [prevQuestionId]: false,
+      }));
+
       setQuizState((prev) => ({
         ...prev,
         currentQuestionIndex: prev.currentQuestionIndex - 1,
@@ -122,6 +246,29 @@ export default function QuizPage() {
   const allQuestionsAnswered = quizState.questions.every(
     (q) => quizState.userAnswers[q.id]
   );
+
+  const handleMultiAnswerSubmit = (questionId: string) => {
+    setMultiAnswerSubmitted((prev) => ({
+      ...prev,
+      [questionId]: true,
+    }));
+  };
+
+  // Function to determine if explanation should be shown
+  const shouldShowExplanation = (questionId: string) => {
+    const question = quizState.questions.find((q) => q.id === questionId);
+    const hasUserAnswer = !!quizState.userAnswers[questionId];
+
+    if (!hasUserAnswer) return false;
+
+    // For multiple-answer questions, require explicit submission
+    if (question?.hasMultipleCorrectAnswers) {
+      return !!multiAnswerSubmitted[questionId];
+    }
+
+    // For single-answer questions, show immediately after selection
+    return true;
+  };
 
   if (isLoading) {
     return (
@@ -198,9 +345,10 @@ export default function QuizPage() {
             <QuizCard
               question={question}
               onAnswer={handleAnswer}
-              showExplanation={!!quizState.userAnswers[question.id]}
+              showExplanation={shouldShowExplanation(question.id)}
               userAnswer={quizState.userAnswers[question.id]}
               onFeedback={handleFeedback}
+              onMultiAnswerSubmit={() => handleMultiAnswerSubmit(question.id)}
             />
           </div>
         ))}
@@ -216,14 +364,25 @@ export default function QuizPage() {
           {allQuestionsAnswered && (
             <button
               onClick={() => {
+                // Save quiz as complete in localStorage
+                const completedQuizState = {
+                  ...quizState,
+                  isComplete: true,
+                };
                 localStorage.setItem(
                   "quizState",
-                  JSON.stringify({
-                    ...quizState,
-                    isComplete: true,
-                  })
+                  JSON.stringify(completedQuizState)
                 );
-                router.push("/results");
+
+                // Save to database
+                saveQuizToDatabase(completedQuizState)
+                  .then(() => {
+                    router.push("/results");
+                  })
+                  .catch((error) => {
+                    console.error("Error saving quiz:", error);
+                    router.push("/results");
+                  });
               }}
               className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded"
             >
@@ -247,9 +406,12 @@ export default function QuizPage() {
         <QuizCard
           question={currentQuestion}
           onAnswer={handleAnswer}
-          showExplanation={!!quizState.userAnswers[currentQuestion.id]}
+          showExplanation={shouldShowExplanation(currentQuestion.id)}
           userAnswer={quizState.userAnswers[currentQuestion.id]}
           onFeedback={handleFeedback}
+          onMultiAnswerSubmit={() =>
+            handleMultiAnswerSubmit(currentQuestion.id)
+          }
         />
       )}
 

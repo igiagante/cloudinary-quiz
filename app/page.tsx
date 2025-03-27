@@ -164,6 +164,34 @@ export default function Home() {
 
       updateProgress("Quiz generation successful! Preparing your quiz...");
 
+      // Create a quiz in the database
+      updateProgress("Creating quiz in database...");
+      const userId = localStorage.getItem("userId");
+      const createQuizResponse = await fetch("/api/quizzes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          numQuestions: questions.length,
+          questionIds: questions.map((q: any) => q.id),
+        }),
+      });
+
+      if (!createQuizResponse.ok) {
+        const errorData = await createQuizResponse.json();
+        console.error("Failed to create quiz in database:", errorData);
+        updateProgress(
+          "Warning: Failed to save quiz to database. Continuing anyway..."
+        );
+      } else {
+        const quizData = await createQuizResponse.json();
+        // Save the quiz ID to localStorage
+        localStorage.setItem("quizId", quizData.quizId);
+        updateProgress("Quiz saved to database successfully!");
+      }
+
       // Add the questions to the quiz state
       const quizState = {
         questions,
@@ -171,6 +199,25 @@ export default function Home() {
         userAnswers: {},
         isComplete: false,
       };
+
+      // Debug multiple-answer questions
+      console.log("Quiz state being stored:", JSON.stringify(quizState));
+      const multipleAnswerQuestions = questions.filter(
+        (q: any) => q.hasMultipleCorrectAnswers
+      );
+      console.log(
+        `Found ${multipleAnswerQuestions.length} multiple-answer questions`
+      );
+      if (multipleAnswerQuestions.length > 0) {
+        multipleAnswerQuestions.forEach((q: any, i: number) => {
+          console.log(`Multiple answer Q${i + 1}:`, {
+            question: q.question.substring(0, 50) + "...",
+            hasFlag: q.hasMultipleCorrectAnswers,
+            correctAnswers: q.correctAnswers,
+            options: q.options.length,
+          });
+        });
+      }
 
       // Save the quiz state to localStorage
       localStorage.setItem("quizState", JSON.stringify(quizState));

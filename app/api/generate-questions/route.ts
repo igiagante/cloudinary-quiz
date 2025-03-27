@@ -2,11 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import {
   questionRepository,
-  QuestionWithOptions,
+  QuestionWithOptions as DbQuestionWithOptions,
 } from "@/lib/db/repositories/question.repository";
 import { Topic } from "@/types";
 import { generateQuizFast } from "@/lib/quiz-generator";
-import { setProgressCallback } from "@/lib/quiz-generator";
+import { setProgressCallback, setVerboseLogging } from "@/lib/quiz-generator";
 
 // Define schema for structured output
 const questionSchema = z.object({
@@ -31,7 +31,28 @@ const GenerateSchema = z.object({
   difficulty: z.enum(["easy", "medium", "hard"]).optional(),
   model: z.enum(["openai", "claude", "none"]).default("none"),
   maxNewQuestions: z.number().min(1).max(10).default(3),
+  verboseLogging: z.boolean().optional(),
 });
+
+// Define a type for option objects
+interface OptionWithCorrectness {
+  text: string;
+  isCorrect: boolean;
+}
+
+// Define a type for the question with options
+interface FormattableQuestion {
+  uuid: string;
+  question: string;
+  explanation: string;
+  topic: string;
+  difficulty: string;
+  source?: string;
+  status?: string;
+  qualityScore?: number;
+  hasMultipleCorrectAnswers?: boolean;
+  options: Array<{ text: string; isCorrect: boolean }>;
+}
 
 // Utility function to shuffle an array
 function shuffleArray<T>(array: T[]): T[] {
@@ -44,29 +65,72 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 // Utility function to format a question with shuffled options
-function formatQuestionWithShuffledOptions(q: QuestionWithOptions) {
-  // Skip questions with empty options
-  if (!q.options || !Array.isArray(q.options) || q.options.length < 2) {
-    console.error(
-      `ERROR: Question ${q.uuid} has invalid options - skipping question`
-    );
-    return null;
-  }
+function formatQuestionWithShuffledOptions(q: FormattableQuestion) {
+  if (!q) return null;
 
-  // Extract options with their correctness info
-  const optionsWithCorrectness = q.options.map((o) => ({
-    text: o.text,
-    isCorrect: o.isCorrect,
-  }));
+  const optionsWithCorrectness: OptionWithCorrectness[] = q.options.map(
+    (o) => ({
+      text: o.text,
+      isCorrect: o.isCorrect,
+    })
+  );
 
   // Shuffle the options
   const shuffledOptions = shuffleArray(optionsWithCorrectness);
+
+  // Check if this question should have multiple correct answers
+  const questionText = q.question.toLowerCase();
+  const textIndicatesMultipleSelection =
+    questionText.includes("select up to") ||
+    questionText.includes("select all that apply") ||
+    questionText.includes("select two") ||
+    questionText.includes("select 2") ||
+    (questionText.includes("(select") && questionText.includes(")"));
+
+  // Get count from "select up to X" if it exists
+  const match = questionText.match(/select up to (\d+)/i);
+  const selectUpToCount = match && match[1] ? parseInt(match[1], 10) : 0;
+
+  // Count correct options
+  const correctOptions = shuffledOptions.filter((o) => o.isCorrect);
+
+  // IMPORTANT: Use database flag if available, otherwise determine from question text/options
+  const hasMultipleCorrectAnswers =
+    q.hasMultipleCorrectAnswers === true ||
+    correctOptions.length > 1 ||
+    (textIndicatesMultipleSelection && selectUpToCount > 1);
+
+  // Get all correct answers for multiple choice questions
+  const correctAnswers = hasMultipleCorrectAnswers
+    ? shuffledOptions.filter((o) => o.isCorrect).map((o) => o.text)
+    : [];
+
+  // For logging/debugging
+  if (hasMultipleCorrectAnswers || textIndicatesMultipleSelection) {
+    console.log(
+      `Multiple selection question detected: "${q.question.substring(
+        0,
+        40
+      )}..."`,
+      {
+        hasMultipleCorrectAnswers: q.hasMultipleCorrectAnswers,
+        dbHasMultiple: q.hasMultipleCorrectAnswers === true,
+        correctOptionsCount: correctOptions.length,
+        textIndicatesMultipleSelection,
+        selectUpToCount,
+        settingHasMultiple: hasMultipleCorrectAnswers,
+        correctAnswersArray: correctAnswers,
+      }
+    );
+  }
 
   return {
     id: q.uuid,
     question: q.question,
     options: shuffledOptions.map((o) => o.text),
     correctAnswer: shuffledOptions.find((o) => o.isCorrect)?.text || "",
+    correctAnswers: hasMultipleCorrectAnswers ? correctAnswers : [],
+    hasMultipleCorrectAnswers: hasMultipleCorrectAnswers,
     explanation: q.explanation,
     topic: q.topic,
     difficulty: q.difficulty,
@@ -89,6 +153,7 @@ export async function POST(request: NextRequest) {
       difficulty,
       model,
       maxNewQuestions = 3,
+      verboseLogging = false,
     } = body;
 
     // Validate inputs
@@ -104,13 +169,15 @@ export async function POST(request: NextRequest) {
     const useModel = model === "none" ? "none" : model;
 
     // Collection for progress logs
-    const progressLogs: string[] = [];
+    const progressLogs: { message: string; level: string }[] = [];
 
-    // Set up progress callback to capture progress
-    setProgressCallback((message) => {
-      progressLogs.push(message);
-      console.log("Progress:", message);
+    // Set up progress callback to capture progress with log levels
+    setProgressCallback((message, level = "info") => {
+      progressLogs.push({ message, level });
     });
+
+    // Set verbose logging based on request parameter
+    setVerboseLogging(verboseLogging);
 
     console.log(
       `Generating quiz with: numQuestions=${numQuestions}, topics=${JSON.stringify(
@@ -124,11 +191,12 @@ export async function POST(request: NextRequest) {
         numQuestions,
         topics as Topic[],
         difficulty as "easy" | "medium" | "hard",
-        true, // Always allow generation in the API
+        false, // Only use database questions
         useModel,
-        maxNewQuestions
+        0 // No new question generation
       );
 
+      // Remove detailed progress logs
       console.log(`Generated ${questions.length} questions successfully`);
 
       if (!questions || !Array.isArray(questions) || questions.length === 0) {
@@ -139,14 +207,24 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Return both questions and progress logs
-      return NextResponse.json({ questions, progressLogs });
+      // Return only the questions without progress logs
+      return NextResponse.json({
+        questions,
+        stats: {
+          total: questions.length,
+          fromDatabase: questions.length,
+        },
+      });
     } catch (generateError) {
       console.error("Error in generateQuizFast:", generateError);
       throw generateError;
     }
   } catch (error) {
-    console.error("Error generating questions:", error);
+    // Keep only essential error logging
+    console.error(
+      "Error generating questions:",
+      error instanceof Error ? error.message : error
+    );
     if (error instanceof Error) {
       console.error("Error message:", error.message);
       console.error("Error stack:", error.stack);
@@ -191,7 +269,7 @@ export async function GET(request: NextRequest) {
     }
 
     const formattedQuestions = questions
-      .map((q) => formatQuestionWithShuffledOptions(q))
+      .map((q) => formatQuestionWithShuffledOptions(q as FormattableQuestion))
       .filter((q) => q !== null);
 
     return NextResponse.json({ questions: formattedQuestions });

@@ -22,18 +22,74 @@ import {
 } from "./db/parser/topic-parser";
 
 // Progress tracking
-type ProgressCallback = (message: string) => void;
+type LogLevel = "debug" | "info" | "warn" | "error";
+type ProgressCallback = (message: string, level?: LogLevel) => void;
 let progressCallback: ProgressCallback | null = null;
+let isVerboseLogging = false; // Control detailed logs
 
 export function setProgressCallback(callback: ProgressCallback) {
   progressCallback = callback;
 }
 
-function reportProgress(message: string) {
+export function setVerboseLogging(verbose: boolean) {
+  isVerboseLogging = verbose;
+}
+
+function reportProgress(message: string, level: LogLevel = "info") {
   if (progressCallback) {
-    progressCallback(message);
+    progressCallback(message, level);
   }
-  console.log(message);
+
+  // Only log to console based on level and verbosity setting
+  if (level === "error") {
+    console.error(message);
+  } else if (level === "warn") {
+    console.warn(message);
+  } else if (level === "info" || (level === "debug" && isVerboseLogging)) {
+    console.log(message);
+  }
+}
+
+// Helper function to log question processing in a cleaner format
+function logQuestionProcessing(
+  q: QuestionWithOptions,
+  isVerbose: boolean = false
+) {
+  const questionId = q.uuid;
+  const topic = q.topic;
+  const optionsCount = q.options?.length || 0;
+
+  if (!isVerbose) {
+    // Simple log for normal operation
+    return;
+  }
+
+  // Detailed logs only when verbose mode is enabled
+  reportProgress(
+    `Processing question ${questionId.substring(0, 8)}... (${topic})`,
+    "debug"
+  );
+
+  if (optionsCount < 2) {
+    reportProgress(
+      `Warning: Question ${questionId.substring(
+        0,
+        8
+      )}... has only ${optionsCount} options`,
+      "warn"
+    );
+  }
+
+  // Log final question state in compact JSON format
+  const summary = {
+    id: questionId.substring(0, 8) + "...",
+    topic,
+    optionsCount,
+    hasCorrectAnswer: q.options?.some((o) => o.isCorrect) || false,
+    hasMultipleCorrectAnswers: q.hasMultipleCorrectAnswers || false,
+  };
+
+  reportProgress(`Question summary: ${JSON.stringify(summary)}`, "debug");
 }
 
 // Utility function to shuffle an array
@@ -50,16 +106,7 @@ function shuffleArray<T>(array: T[]): T[] {
 export function formatQuestionWithShuffledOptions(
   q: QuestionWithOptions
 ): QuizQuestion | null {
-  // Debug - log incoming question structure
-  console.log(`Debug - Input question ${q.uuid} (topic: ${q.topic}):`);
-  console.log(`  - Question text: ${q.question.substring(0, 30)}...`);
-  console.log(`  - Options count: ${q.options?.length || 0}`);
-  console.log(`  - Has options_jsonb: ${!!q.options_jsonb}`);
-  console.log(`  - correctAnswer: ${q.correctAnswer || "none"}`);
-  console.log(`  - hasMultipleCorrectAnswers: ${q.hasMultipleCorrectAnswers}`);
-  console.log(`  - correctAnswers length: ${q.correctAnswers?.length || 0}`);
-
-  // First try using the regular options array
+  // Try using the regular options array
   let questionOptions =
     q.options && q.options.length > 0
       ? q.options.map((o) => ({
@@ -73,22 +120,12 @@ export function formatQuestionWithShuffledOptions(
   if (!questionOptions || questionOptions.length === 0) {
     try {
       if (q.options_jsonb) {
-        console.log(
-          `Attempting to parse options_jsonb:`,
-          typeof q.options_jsonb === "string"
-            ? q.options_jsonb.substring(0, 100) + "..."
-            : "non-string value"
-        );
-
         const parsedOptions =
           typeof q.options_jsonb === "string"
             ? JSON.parse(q.options_jsonb)
             : q.options_jsonb;
 
         if (Array.isArray(parsedOptions) && parsedOptions.length > 0) {
-          console.log(
-            `Found ${parsedOptions.length} options in the jsonb field`
-          );
           questionOptions = parsedOptions.map((opt: string, index: number) => ({
             id: index,
             text: opt,
@@ -98,8 +135,7 @@ export function formatQuestionWithShuffledOptions(
       }
     } catch (e) {
       console.error(
-        `Error parsing options from jsonb for question ${q.uuid}:`,
-        e
+        `Error parsing options for question ${q.uuid.substring(0, 8)}...`
       );
     }
   }
@@ -122,9 +158,6 @@ export function formatQuestionWithShuffledOptions(
 
       // If we have options from the regex
       if (possibleOptions.length >= 2) {
-        console.log(
-          `Extracted ${possibleOptions.length} options from question text`
-        );
         questionOptions = possibleOptions.map((text, idx) => ({
           id: idx,
           text,
@@ -139,16 +172,15 @@ export function formatQuestionWithShuffledOptions(
     }
   }
 
-  // If we still have no options, skip this question instead of creating fallbacks
+  // If we still have no options, skip this question
   if (
     !questionOptions ||
     !Array.isArray(questionOptions) ||
     questionOptions.length < 2
   ) {
     console.error(
-      `ERROR: Question ${q.uuid} has invalid options - skipping question`
+      `Question ${q.uuid.substring(0, 8)}... has invalid options - skipped`
     );
-    // Return null to indicate this question should be skipped
     return null;
   }
 
@@ -164,13 +196,37 @@ export function formatQuestionWithShuffledOptions(
       ? q.hasMultipleCorrectAnswers
       : false;
 
+  // Check for multiple correct answers in the question text (this is new)
+  if (!hasMultipleCorrectAnswers) {
+    const questionText = q.question.toLowerCase();
+    const textIndicatesMultipleSelection =
+      questionText.includes("select up to") ||
+      questionText.includes("select all that apply") ||
+      questionText.includes("select two") ||
+      questionText.includes("select 2") ||
+      (questionText.includes("(select") && questionText.includes(")"));
+
+    // Count correct options
+    const correctOptionsCount = optionsWithCorrectness.filter(
+      (o) => o.isCorrect
+    ).length;
+
+    // Set flag based on text and/or multiple correct options
+    if (textIndicatesMultipleSelection || correctOptionsCount > 1) {
+      hasMultipleCorrectAnswers = true;
+      console.log(
+        `Multiple-answer question detected from text: "${q.question.substring(
+          0,
+          40
+        )}..."`
+      );
+    }
+  }
+
   // Check for multiple correct answers in the explanation field before shuffling
   // This is a fallback for questions that have multiple answers indicated in the explanation
   if (!hasMultipleCorrectAnswers && q.explanation) {
     const explanationText = q.explanation.toLowerCase();
-    console.log(
-      `Checking explanation for multiple correct answers hints: "${explanationText}"`
-    );
 
     // Check for different patterns indicating multiple correct answers
     const hasMultipleCorrectPattern =
@@ -181,8 +237,6 @@ export function formatQuestionWithShuffledOptions(
         /[a-e],\s*[a-e]/i.test(explanationText));
 
     if (hasMultipleCorrectPattern) {
-      console.log(`Found pattern indicating multiple correct answers`);
-
       // Try to extract letter options (A, B, C, D, E)
       let letterMatches: RegExpMatchArray | null = null;
 
@@ -200,9 +254,6 @@ export function formatQuestionWithShuffledOptions(
         if (match && match[1]) {
           letterMatches = match[1].match(/[a-e]/gi);
           if (letterMatches && letterMatches.length > 1) {
-            console.log(
-              `Found correct answers using pattern: ${letterMatches.join(", ")}`
-            );
             break;
           }
         }
@@ -234,20 +285,10 @@ export function formatQuestionWithShuffledOptions(
               optionsWithCorrectness[idx].isCorrect = true;
             }
           });
-
-          console.log(`Marked options as correct: ${letterIndices.join(", ")}`);
         }
       }
     }
   }
-
-  // Debug - log options with correctness
-  console.log(`  - Formatted options with correctness:`);
-  optionsWithCorrectness.forEach((o, i) => {
-    console.log(
-      `    [${i}] ${o.text.substring(0, 20)}... (correct: ${o.isCorrect})`
-    );
-  });
 
   // Shuffle the options
   const shuffledOptions = shuffleArray([...optionsWithCorrectness]);
@@ -277,8 +318,37 @@ export function formatQuestionWithShuffledOptions(
   ) {
     // Use provided correctAnswers array if available
     correctAnswers = q.correctAnswers;
+  } else if (hasMultipleCorrectAnswers) {
+    // Otherwise, use correct options from option array
+    correctAnswers = shuffledOptions
+      .filter((o) => o.isCorrect)
+      .map((o) => o.text);
+
+    // Make sure we have at least two correct answers for multiple-choice questions
+    if (correctAnswers.length < 2 && shuffledOptions.length >= 2) {
+      // If we don't have at least 2 correct answers but the question text indicates
+      // multiple answers, add a second correct option
+      console.log(
+        `Warning: Question marked as multiple-answer but only has ${correctAnswers.length} correct options`
+      );
+
+      // If correctAnswer is set but not in correctAnswers, add it
+      if (q.correctAnswer && !correctAnswers.includes(q.correctAnswer)) {
+        correctAnswers.push(q.correctAnswer);
+      }
+
+      // If we still don't have 2 correct answers, add another option
+      if (correctAnswers.length < 2 && shuffledOptions.length >= 2) {
+        // Find an option that's not already marked as correct
+        const unusedOption = shuffledOptions.find((o) => !o.isCorrect);
+        if (unusedOption) {
+          unusedOption.isCorrect = true;
+          correctAnswers.push(unusedOption.text);
+        }
+      }
+    }
   } else if (correctAnswers.length === 0) {
-    // Otherwise, use correct options from shuffled array
+    // For single-answer questions, just use the correct option
     correctAnswers = correctOptions.map((o) => o.text);
   }
 
@@ -306,18 +376,6 @@ export function formatQuestionWithShuffledOptions(
     hasMultipleCorrectAnswers,
     correctAnswers: hasMultipleCorrectAnswers ? correctAnswers : [],
   };
-
-  // Debug - log final formatted question
-  console.log(
-    `  - Final formatted question:`,
-    JSON.stringify({
-      id: result.id,
-      optionsCount: result.options.length,
-      hasCorrectAnswer: !!result.correctAnswer,
-      hasMultipleCorrectAnswers: result.hasMultipleCorrectAnswers,
-      correctAnswersCount: result.correctAnswers?.length || 0,
-    })
-  );
 
   return result;
 }
