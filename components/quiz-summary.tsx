@@ -17,11 +17,11 @@ interface QuizSummaryProps {
   passThreshold: number;
 }
 
-const QuizSummary: React.FC<QuizSummaryProps> = ({
+const QuizSummary = ({
   topicPerformance,
   totalScore,
   passThreshold = 80,
-}) => {
+}: QuizSummaryProps) => {
   const passed = totalScore.percentage >= passThreshold;
 
   // Order topics to match certification order

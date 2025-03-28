@@ -22,7 +22,6 @@ export async function createTestUser(): Promise<void> {
       .insert(schema.users)
       .values({
         id: uuidv4(),
-        uuid: uuidv4(),
         email: "test@example.com",
         name: "Test User",
         isAnonymous: false,

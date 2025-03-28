@@ -245,6 +245,7 @@ export function parseQuizFormat(filePath: string): any[] {
   let inAnswersSection = false;
   const answerMap = new Map<number, number[]>(); // Map question number to array of correct option indices
   const multiAnswerQuestionNumbers = new Set<number>(); // Track questions with multiple answers
+  const explanationMap = new Map<number, string>(); // Map question number to explanation
 
   // Process the file line by line
   for (let i = 0; i < lines.length; i++) {
@@ -294,6 +295,43 @@ export function parseQuizFormat(filePath: string): any[] {
           // Mark questions with multiple answers
           if (correctIndices.length > 1) {
             multiAnswerQuestionNumbers.add(questionNum);
+          }
+
+          // Look for explanation following this answer
+          let explanation = "";
+          let j = i + 1;
+          // Look for explanation marker
+          while (j < lines.length) {
+            if (lines[j].includes("**Explanation:**")) {
+              // Start capturing the explanation
+              explanation = lines[j].split("**Explanation:**")[1].trim();
+              j++;
+
+              // Continue capturing until we hit another question or run out of lines
+              while (j < lines.length) {
+                const nextLine = lines[j].trim();
+                // Stop if we've hit the next question answer
+                if (nextLine.match(/^\d+\.\s+[A-E]/)) {
+                  break;
+                }
+                // Add to explanation if not empty
+                if (nextLine) {
+                  explanation += "\n" + nextLine;
+                }
+                j++;
+              }
+              break;
+            }
+            j++;
+            // Stop if we hit another question
+            if (lines[j] && lines[j].match(/^\d+\.\s+[A-E]/)) {
+              break;
+            }
+          }
+
+          if (explanation) {
+            explanationMap.set(questionNum, explanation.trim());
+            console.log(`Found explanation for question ${questionNum}`);
           }
         }
       }
@@ -457,6 +495,23 @@ export function parseQuizFormat(filePath: string): any[] {
       (sum: number, q: any) => sum + q.options.length,
       0
     )} total options (${finalMultipleAnswerQuestions} questions have multiple correct answers)`
+  );
+
+  // When creating the final questions array, include the explanations
+  for (const q of questions) {
+    // Add explanation from explanation map
+    const explanation = explanationMap.get(q.number);
+    if (explanation) {
+      q.explanation = explanation;
+    }
+  }
+
+  // Count questions with explanations
+  const questionsWithExplanations = questions.filter(
+    (q) => q.explanation
+  ).length;
+  console.log(
+    `Found explanations for ${questionsWithExplanations} out of ${questions.length} questions`
   );
 
   return questions;

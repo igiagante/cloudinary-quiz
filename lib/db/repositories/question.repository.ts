@@ -1,4 +1,3 @@
-// @ts-nocheck
 // TODO: Refactor this file to properly define types for Drizzle ORM queries
 // - Update Drizzle ORM to latest version
 // - Define proper relations in schema
@@ -15,7 +14,7 @@ import {
   questionStatusEnum,
   NewQuestion,
 } from "../schema";
-import { v4 as uuidv4 } from "uuid";
+import { nanoid } from "nanoid";
 import { PgTransaction } from "drizzle-orm/pg-core";
 
 // Define source models as a const object
@@ -48,7 +47,6 @@ interface DbOption {
 
 export type QuestionWithOptions = {
   id: number;
-  uuid: string;
   question: string;
   explanation: string;
   topic: string;
@@ -101,7 +99,6 @@ export const questionRepository = {
 
     return result.map((q: any) => ({
       id: q.id,
-      uuid: q.uuid,
       question: q.question,
       explanation: q.explanation,
       topic: q.topic,
@@ -122,7 +119,7 @@ export const questionRepository = {
    */
   async getByUuid(uuid: string): Promise<QuestionWithOptions | null> {
     const result = await db.query.questions.findFirst({
-      where: eq(questions.uuid, uuid),
+      where: eq(questions.id, uuid),
       with: {
         options: true,
       },
@@ -132,7 +129,6 @@ export const questionRepository = {
 
     return {
       id: result.id,
-      uuid: result.uuid,
       question: result.question,
       explanation: result.explanation,
       topic: result.topic,
@@ -157,10 +153,8 @@ export const questionRepository = {
     limit?: number,
     status: string = "active"
   ): Promise<QuestionWithOptions[]> {
-    // Map input topics to valid schema topics
-    const validTopics = topics
-      .filter((t) => Object.values(Topics).includes(t as TopicType))
-      .map((t) => t as TopicType);
+    // No need to validate topics against enum since we store full topic names
+    const validTopics = topics;
 
     // Map difficulty
     const validDifficulty =
@@ -172,7 +166,7 @@ export const questionRepository = {
     const query = db.query.questions.findMany({
       where: and(
         validTopics.length > 0
-          ? inArray(questions.topic, validTopics as unknown as string[])
+          ? inArray(questions.topic, validTopics)
           : undefined,
         validDifficulty
           ? eq(questions.difficulty, validDifficulty as string)
@@ -190,7 +184,6 @@ export const questionRepository = {
 
     return result.map((q: any) => ({
       id: q.id,
-      uuid: q.uuid,
       question: q.question,
       explanation: q.explanation,
       topic: q.topic,
@@ -236,8 +229,7 @@ export const questionRepository = {
       const [questionResult] = await tx
         .insert(questions)
         .values({
-          id: input.id || uuidv4(),
-          uuid: uuidv4(),
+          id: input.id || nanoid(),
           question: input.question,
           explanation: input.explanation,
           topic: validTopic,
@@ -274,12 +266,11 @@ export const questionRepository = {
       // Return the created question with options
       return {
         id: questionResult.id,
-        uuid: questionResult.uuid,
         question: questionResult.question,
         explanation: questionResult.explanation,
         topic: questionResult.topic,
         difficulty: questionResult.difficulty,
-        options: insertedOptions.map((o) => ({
+        options: insertedOptions.map((o: any) => ({
           id: o.id,
           text: o.text,
           isCorrect: o.isCorrect,
@@ -300,7 +291,7 @@ export const questionRepository = {
     const result = await db.transaction(async (tx) => {
       // Get the question first
       const existingQuestion = await tx.query.questions.findFirst({
-        where: eq(questions.uuid, uuid),
+        where: eq(questions.id, uuid),
       });
 
       if (!existingQuestion) {
@@ -329,7 +320,7 @@ export const questionRepository = {
           difficulty: validDifficulty,
           updatedAt: new Date(),
         })
-        .where(eq(questions.uuid, uuid))
+        .where(eq(questions.id, uuid))
         .returning();
 
       // Delete existing options
@@ -354,12 +345,11 @@ export const questionRepository = {
 
       return {
         id: updatedQuestion.id,
-        uuid: updatedQuestion.uuid,
         question: updatedQuestion.question,
         explanation: updatedQuestion.explanation,
         topic: updatedQuestion.topic,
         difficulty: updatedQuestion.difficulty,
-        options: insertedOptions.map((o: DbOption) => ({
+        options: insertedOptions.map((o: any) => ({
           id: o.id,
           text: o.text,
           isCorrect: o.isCorrect,
@@ -376,7 +366,7 @@ export const questionRepository = {
   async delete(uuid: string): Promise<boolean> {
     const result = await db
       .delete(questions)
-      .where(eq(questions.uuid, uuid))
+      .where(eq(questions.id, uuid))
       .returning();
 
     return result.length > 0;
@@ -440,70 +430,56 @@ export const questionRepository = {
   },
 
   /**
-   * Bulk insert questions (for seeding or importing)
+   * Bulk insert multiple questions with options
    */
   async bulkInsert(questionsInput: QuestionInput[]): Promise<number> {
     let insertedCount = 0;
 
     await db.transaction(async (tx) => {
       for (const input of questionsInput) {
-        // Get valid topic or use default
-        const validTopic = Topics.includes(input.topic as TopicType)
-          ? (input.topic as TopicType)
-          : Topics[0];
-
-        // Get valid difficulty or use default
-        const validDifficulty = Difficulties.includes(
-          input.difficulty as DifficultyType
-        )
-          ? (input.difficulty as DifficultyType)
-          : ("medium" as DifficultyType);
-
-        // Get valid source or use default
-        const validSource =
-          input.source &&
-          Object.values(SourceModels).includes(
-            input.source.toLowerCase() as SourceModel
-          )
-            ? input.source.toLowerCase()
-            : SourceModels.Manual;
-
-        // Insert the question with id field
-        const [questionResult] = await tx
-          .insert(questions)
-          .values({
-            id: input.id || uuidv4(),
-            uuid: uuidv4(),
+        try {
+          const questionData = {
             question: input.question,
             explanation: input.explanation,
-            topic: validTopic,
-            difficulty: validDifficulty,
-            source: validSource,
-            correctAnswer: input.options.find((o) => o.isCorrect)?.text || "",
-            options: input.options.map((o) => o.text),
+            topic: input.topic,
+            difficulty: input.difficulty,
+            source: input.source || "manual",
+            status: input.status || "active",
             qualityScore: input.qualityScore || 0,
-            usageCount: 0,
-            successRate: 0,
-            hasMultipleCorrectAnswers: input.hasMultipleCorrectAnswers || false,
-            correctAnswers:
-              input.hasMultipleCorrectAnswers && input.correctAnswers
-                ? input.correctAnswers
-                : null,
+            feedbackCount: 0,
+            positiveRatings: 0,
             createdAt: new Date(),
             updatedAt: new Date(),
-          })
-          .returning();
+          };
 
-        // Insert the options
-        const optionsToInsert = input.options.map((option) => ({
-          questionId: questionResult.id,
-          text: option.text,
-          isCorrect: option.isCorrect,
-          createdAt: new Date(),
-        }));
+          // Insert question and get the ID back
+          const [newQuestion] = await tx
+            .insert(questions)
+            .values(questionData)
+            .returning();
 
-        await tx.insert(options).values(optionsToInsert);
-        insertedCount++;
+          // Only proceed if the question was inserted successfully
+          if (newQuestion) {
+            const options = input.options || [];
+
+            // Insert options for this question
+            if (options.length > 0) {
+              await tx.insert(options).values(
+                options.map((option) => ({
+                  questionId: newQuestion.id,
+                  text: option.text,
+                  isCorrect: option.isCorrect,
+                  createdAt: new Date(),
+                }))
+              );
+            }
+
+            insertedCount++;
+          }
+        } catch (error) {
+          // Log error but continue with other questions
+          console.error("Error inserting question:", error);
+        }
       }
     });
 
@@ -522,7 +498,7 @@ export const questionRepository = {
         deletedAt: now,
         updatedAt: now,
       })
-      .where(eq(questions.uuid, uuid))
+      .where(eq(questions.id, uuid))
       .returning();
 
     return result.length > 0;
@@ -539,7 +515,7 @@ export const questionRepository = {
         deletedAt: null,
         updatedAt: new Date(),
       })
-      .where(eq(questions.uuid, uuid))
+      .where(eq(questions.id, uuid))
       .returning();
 
     return result.length > 0;
@@ -567,7 +543,7 @@ export const questionRepository = {
     const result = await db
       .update(questions)
       .set(updates)
-      .where(eq(questions.uuid, uuid))
+      .where(eq(questions.id, uuid))
       .returning();
 
     return result.length > 0;
@@ -591,7 +567,6 @@ export const questionRepository = {
 
     return result.map((q: any) => ({
       id: q.id,
-      uuid: q.uuid,
       question: q.question,
       explanation: q.explanation,
       topic: q.topic,
@@ -626,7 +601,6 @@ export const questionRepository = {
 
     return result.map((q: any) => ({
       id: q.id,
-      uuid: q.uuid,
       question: q.question,
       explanation: q.explanation,
       topic: q.topic,
@@ -640,5 +614,28 @@ export const questionRepository = {
         isCorrect: o.isCorrect,
       })),
     }));
+  },
+
+  /**
+   * Find a question by ID
+   */
+  async findByIdOrUuid(id: string): Promise<QuestionWithOptions | null> {
+    try {
+      // Try direct query approach
+      let question = await db.query.questions.findFirst({
+        where: eq(questions.id, id),
+      });
+
+      return question;
+    } catch (error) {
+      console.error(`Error finding question with ID ${id}:`, error);
+      return null;
+    }
+  },
+
+  getQuestion: async function (id: string) {
+    return await db.query.questions.findFirst({
+      where: eq(questions.id, id),
+    });
   },
 };

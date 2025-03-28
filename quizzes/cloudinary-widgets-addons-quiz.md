@@ -323,18 +323,32 @@ D) Implementing a custom solution with the Cloudinary PHP SDK
 
 ## Answers
 
-1. A - The Upload Widget allows both uploading assets and browsing the Media Library.
-2. C - The upload_preset parameter is required for authentication in the Upload Widget.
-3. C - This correctly implements a signed Upload Widget with proper authentication using a server-generated signature.
-4. B, C, E - Amazon Rekognition, Imagga, and Microsoft Computer Vision all provide auto-tagging add-ons.
-5. A - This correctly handles the asset selection event using the insertHandler callback.
-6. D - The Remove.bg add-on is specifically designed for automatic background removal.
-7. A - The Product Gallery widget requires enabling the zoom plugin and customizing it with zoom-related options.
-8. A, B - Storing public IDs and integrating the Media Library widget are best practices for headless CMS integrations.
-9. B - Implementing a server-side endpoint for generating signed requests is the recommended secure approach.
-10. B - This correctly implements a Video Player with adaptive streaming using sourceTypes and streaming_profile.
-11. A, B, C - AWS Rekognition, WebPurify, and Google Vision Safe Search are all suitable for content moderation.
-12. A - Generating signed upload URLs on your backend server is the most secure approach for mobile app integration.
-13. B, C - maxFileSize and clientAllowedFormats are used to restrict file types and sizes in the Upload Widget.
-14. B - The theme parameter allows for customizing the appearance of the Media Library widget.
-15. B - Installing the official Cloudinary plugin provides the most comprehensive integration for WordPress.
+1. A - The Upload Widget allows both uploading assets and browsing the Media Library, making it a versatile tool for content management.
+
+2. C - The upload_preset parameter is required for authentication in the Upload Widget, as it defines the preset that includes the authentication settings.
+
+3. C - This correctly implements a signed Upload Widget with proper authentication using a server-generated signature, which is more secure than client-side authentication.
+
+4. B, C, E - Amazon Rekognition, Imagga, and Microsoft Computer Vision all provide auto-tagging add-ons that integrate with Cloudinary to automatically tag uploaded images.
+
+5. A - This correctly handles the asset selection event using the insertHandler callback, which is the proper way to respond when users select assets from the Media Library.
+
+6. D - The Remove.bg add-on is specifically designed for automatic background removal from product images with high quality results.
+
+7. A - The Product Gallery widget requires enabling the zoom plugin and customizing it with zoom-related options to provide proper image zoom functionality.
+
+8. A, B - Storing public IDs and integrating the Media Library widget are best practices for headless CMS integrations, providing flexibility and a better editing experience.
+
+9. B - Implementing a server-side endpoint for generating signed requests is the recommended secure approach for custom authentication flows.
+
+10. B - This correctly implements a Video Player with adaptive streaming using sourceTypes and streaming_profile to deliver the optimal video format based on viewing conditions.
+
+11. A, B, C - AWS Rekognition, WebPurify, and Google Vision Safe Search are all suitable add-ons for content moderation, helping to filter inappropriate images.
+
+12. A - Generating signed upload URLs on your backend server is the most secure approach for mobile app integration, preventing unauthorized uploads.
+
+13. B, C - maxFileSize and clientAllowedFormats are configuration options used to restrict file types and sizes in the Upload Widget.
+
+14. B - The theme parameter allows for customizing the appearance of the Media Library widget to match your application's branding.
+
+15. B - Installing and configuring the official Cloudinary plugin provides the most comprehensive integration for WordPress, automatically handling transformations and delivery optimization.

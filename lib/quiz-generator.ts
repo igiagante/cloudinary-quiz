@@ -19,6 +19,8 @@ import { NextRequest } from "next/server";
 import {
   distributeQuestionsByTopic,
   parseTopics,
+  parseTopicsMetadata,
+  distributeQuestionsByWeight,
 } from "./db/parser/topic-parser";
 
 // Progress tracking
@@ -55,7 +57,6 @@ function logQuestionProcessing(
   q: QuestionWithOptions,
   isVerbose: boolean = false
 ) {
-  const questionId = q.uuid;
   const topic = q.topic;
   const optionsCount = q.options?.length || 0;
 
@@ -65,24 +66,18 @@ function logQuestionProcessing(
   }
 
   // Detailed logs only when verbose mode is enabled
-  reportProgress(
-    `Processing question ${questionId.substring(0, 8)}... (${topic})`,
-    "debug"
-  );
+  reportProgress(`Processing question ${q.id}... (${topic})`, "debug");
 
   if (optionsCount < 2) {
     reportProgress(
-      `Warning: Question ${questionId.substring(
-        0,
-        8
-      )}... has only ${optionsCount} options`,
+      `Warning: Question ${q.id} has only ${optionsCount} options`,
       "warn"
     );
   }
 
   // Log final question state in compact JSON format
   const summary = {
-    id: questionId.substring(0, 8) + "...",
+    id: q.id.toString(),
     topic,
     optionsCount,
     hasCorrectAnswer: q.options?.some((o) => o.isCorrect) || false,
@@ -134,9 +129,7 @@ export function formatQuestionWithShuffledOptions(
         }
       }
     } catch (e) {
-      console.error(
-        `Error parsing options for question ${q.uuid.substring(0, 8)}...`
-      );
+      console.error(`Error parsing options for question ${q.id}...`);
     }
   }
 
@@ -166,7 +159,7 @@ export function formatQuestionWithShuffledOptions(
       }
     } catch (e) {
       console.error(
-        `Error extracting options from question text for ${q.uuid}:`,
+        `Error extracting options from question text for ${q.id}:`,
         e
       );
     }
@@ -178,9 +171,7 @@ export function formatQuestionWithShuffledOptions(
     !Array.isArray(questionOptions) ||
     questionOptions.length < 2
   ) {
-    console.error(
-      `Question ${q.uuid.substring(0, 8)}... has invalid options - skipped`
-    );
+    console.error(`Question ${q.id} has invalid options - skipped`);
     return null;
   }
 
@@ -354,7 +345,7 @@ export function formatQuestionWithShuffledOptions(
 
   if (correctOptions.length === 0) {
     console.error(
-      `ERROR: Question ${q.uuid} has no correct answer among options`
+      `ERROR: Question ${q.id} has no correct answer among options`
     );
     // Default to first option as correct
     shuffledOptions[0].isCorrect = true;
@@ -362,7 +353,7 @@ export function formatQuestionWithShuffledOptions(
   }
 
   const result: QuizQuestion = {
-    id: q.uuid,
+    id: q.id.toString(),
     question: q.question,
     options: shuffledOptions.map((o) => o.text),
     correctAnswer:
@@ -397,6 +388,9 @@ function createTopicDistribution(
   const safeTopics = [...topics];
   const distribution: Record<string, number> = {};
 
+  // Log the topics we're distributing
+  console.log("Creating distribution for topics:", safeTopics);
+
   // Initialize with at least one question per topic if possible
   const questionsPerTopic = Math.max(
     1,
@@ -410,6 +404,8 @@ function createTopicDistribution(
       console.warn(`Skipping invalid topic: ${topic}`);
     }
   });
+
+  console.log("Initial distribution:", distribution);
 
   // Distribute any remaining questions
   let remainingQuestions =
@@ -742,19 +738,29 @@ export async function generateQuizFast(
     const questionsToGenerate = Math.max(1, Math.min(30, numQuestions || 10));
     reportProgress(`Will generate ${questionsToGenerate} questions`);
 
-    // 1. Select topics if none provided
-    const selectedTopics =
-      topics && Array.isArray(topics) && topics.length > 0
-        ? topics
-        : shuffleArray(cloudinaryTopicList).slice(
-            0,
-            Math.min(questionsToGenerate, 5)
-          );
+    // 1. Select topics with proper parsing - convert to string array
+    const topicsAsStrings =
+      topics && Array.isArray(topics)
+        ? topics.map((t) => String(t)) // Ensure all topics are strings
+        : [];
 
+    // Use parseTopics to ensure consistent handling
+    const selectedTopics = parseTopics(topicsAsStrings);
+
+    // Validate we have topics to work with
+    if (selectedTopics.length === 0) {
+      throw new Error("No topics provided for quiz generation");
+    }
+
+    // Log the exact topic strings being used
     reportProgress(`Selected topics: ${selectedTopics.join(", ")}`);
+    console.log(
+      "Topic strings for database query:",
+      JSON.stringify(selectedTopics)
+    );
 
-    // 2. Create topic distribution
-    const topicDistribution = createTopicDistribution(
+    // 2. Create topic distribution using the improved function
+    const topicDistribution = distributeQuestionsByTopic(
       selectedTopics,
       questionsToGenerate
     );
@@ -777,6 +783,10 @@ export async function generateQuizFast(
           difficulty,
           count * 2,
           "active" // Only get active questions
+        );
+
+        console.log(
+          `Raw DB query for topic "${topic}" returned ${dbQuestions.length} questions`
         );
 
         reportProgress(
@@ -1118,8 +1128,8 @@ function selectQuestions(
   count: number
 ): QuizQuestion[] {
   // Get topic distribution
-  const distribution = distributeQuestionsByTopic(count);
-  const topics = parseTopics();
+  const distribution = distributeQuestionsByWeight(count);
+  const topics = parseTopicsMetadata();
   const selectedQuestions: QuizQuestion[] = [];
 
   // Keep track of how many questions we've selected per topic

@@ -1,6 +1,7 @@
 // app/api/quizzes/[quizId]/complete/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { quizRepository } from "@/lib/db/repositories/quiz.repository";
+import { debug } from "@/lib/debug";
+import { QuizService } from "@/lib/services/quiz.service";
 
 export async function POST(
   request: NextRequest,
@@ -8,21 +9,39 @@ export async function POST(
 ) {
   try {
     const { quizId } = await params;
-    const body = await request.json();
-    const { score, topicPerformance } = body;
 
-    // Get quiz by UUID to get its numeric ID
-    const quiz = await quizRepository.getByUuid(quizId);
+    const quizService = new QuizService();
+    const quiz = await quizService.getQuizById(quizId);
+
     if (!quiz) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
     }
 
-    // Complete the quiz and calculate results
-    await quizRepository.completeQuiz(quiz.id, score, topicPerformance);
+    if (quiz.isCompleted) {
+      return NextResponse.json(
+        { error: "Quiz already completed" },
+        { status: 400 }
+      );
+    }
 
-    return NextResponse.json({ success: true });
+    // Calculate score
+    const totalQuestions = quiz.questions.length;
+    const correctAnswers = quiz.questions.filter((q) => q.isCorrect).length;
+    const score = quizService.calculateScore(correctAnswers, totalQuestions);
+
+    // Complete the quiz
+    await quizService.completeQuiz(quiz.id, correctAnswers, totalQuestions, []);
+
+    return NextResponse.json({
+      quizId: quiz.id,
+      totalQuestions,
+      correctAnswers,
+      score,
+      passed: score >= quiz.passPercentage,
+      topicPerformance: [], // Empty array for now since we don't have the data
+    });
   } catch (error) {
-    console.error("Error completing quiz:", error);
+    debug.error("Error completing quiz:", error);
     return NextResponse.json(
       {
         error:

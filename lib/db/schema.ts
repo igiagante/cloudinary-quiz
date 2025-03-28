@@ -14,6 +14,7 @@ import {
   jsonb,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+import { nanoid } from "nanoid";
 
 // Existing enums
 export const topicEnum = pgEnum("topic", [
@@ -55,8 +56,7 @@ export const questionStatusEnum = pgEnum("question_status", [
 
 // New user table
 export const users = pgTable("users", {
-  id: text("id").primaryKey().notNull(),
-  uuid: varchar("uuid", { length: 36 }).notNull().unique(),
+  id: varchar("id", { length: 128 }).primaryKey().notNull(),
   email: varchar("email", { length: 255 }).unique(), // Optional for anonymous users
   name: varchar("name", { length: 255 }),
   avatarUrl: text("avatar_url"),
@@ -67,40 +67,30 @@ export const users = pgTable("users", {
 
 // Questions table (updated)
 export const questions = pgTable("questions", {
-  // Primary identifier
-  id: text("id").primaryKey(),
-  uuid: uuid("uuid").defaultRandom(),
-
-  // Core question data
+  id: varchar("id", { length: 21 })
+    .primaryKey()
+    .notNull()
+    .$defaultFn(() => nanoid()),
   question: text("question").notNull(),
   options: jsonb("options").notNull(), // Array of possible answers
   correctAnswer: text("correctAnswer").notNull(),
   explanation: text("explanation").notNull(),
-
-  // Categorization
   topic: text("topic").notNull(),
   difficulty: text("difficulty").notNull(), // 'easy', 'medium', 'hard'
   source: text("source").default("manual"), // 'openai', 'claude', 'manual'
   topicId: integer("topic_id"), // Exam topic ID (1-8)
   pointValue: real("point_value"), // Point value for this question in exam scoring
-
-  // Status and deletion
   status: text("status").default("active").notNull(), // 'active', 'review', 'deleted'
   deletedAt: timestamp("deleted_at"),
-
   hasMultipleCorrectAnswers: boolean("has_multiple_correct_answers").default(
     false
   ),
   correctAnswers: text("correct_answers").array(),
-
-  // Usage metrics
   qualityScore: real("quality_score").default(0),
   usageCount: integer("usage_count").default(0),
   positiveRatings: integer("positive_ratings").default(0),
   feedbackCount: integer("feedback_count").default(0),
   successRate: real("success_rate").default(0),
-
-  // Timestamps
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -108,7 +98,7 @@ export const questions = pgTable("questions", {
 // Options table (existing)
 export const options = pgTable("options", {
   id: serial("id").primaryKey(),
-  questionId: text("question_id")
+  questionId: varchar("question_id", { length: 21 })
     .references(() => questions.id, { onDelete: "cascade" })
     .notNull(),
   text: text("text").notNull(),
@@ -118,9 +108,13 @@ export const options = pgTable("options", {
 
 // Update quizzes table to reference user
 export const quizzes = pgTable("quizzes", {
-  id: serial("id").primaryKey(),
-  uuid: varchar("uuid", { length: 36 }).notNull().unique(),
-  userId: text("user_id").references(() => users.id), // Can be null for anonymous quizzes
+  id: varchar("id", { length: 21 })
+    .primaryKey()
+    .notNull()
+    .$defaultFn(() => nanoid()),
+  userId: varchar("user_id", { length: 128 })
+    .notNull()
+    .references(() => users.id),
   numQuestions: integer("num_questions").notNull(),
   isCompleted: boolean("is_completed").default(false).notNull(),
   score: integer("score"),
@@ -132,10 +126,10 @@ export const quizzes = pgTable("quizzes", {
 // Existing tables
 export const quizQuestions = pgTable("quiz_questions", {
   id: serial("id").primaryKey(),
-  quizId: integer("quiz_id")
+  quizId: varchar("quiz_id", { length: 21 })
     .references(() => quizzes.id)
     .notNull(),
-  questionId: text("question_id")
+  questionId: varchar("question_id", { length: 21 })
     .references(() => questions.id)
     .notNull(),
   userAnswer: integer("user_answer").references(() => options.id),
@@ -145,7 +139,7 @@ export const quizQuestions = pgTable("quiz_questions", {
 
 export const topicPerformance = pgTable("topic_performance", {
   id: serial("id").primaryKey(),
-  quizId: integer("quiz_id")
+  quizId: varchar("quiz_id", { length: 21 })
     .references(() => quizzes.id, { onDelete: "cascade" })
     .notNull(),
   topic: topicEnum("topic").notNull(),
@@ -158,7 +152,7 @@ export const topicPerformance = pgTable("topic_performance", {
 // User-specific performance tracking over time
 export const userTopicPerformance = pgTable("user_topic_performance", {
   id: serial("id").primaryKey(),
-  userId: text("user_id")
+  userId: varchar("user_id", { length: 21 })
     .references(() => users.id, { onDelete: "cascade" })
     .notNull(),
   topic: topicEnum("topic").notNull(),

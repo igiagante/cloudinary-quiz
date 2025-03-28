@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { quizRepository } from "@/lib/db/repositories/quiz.repository";
+import { debug } from "@/lib/debug";
+import { QuizAnswerService } from "@/lib/services/quiz-answer.service";
+import { QuizService } from "@/lib/services/quiz.service";
 
 // Input validation schema for submitting quiz answers
 const submitAnswersSchema = z.object({
@@ -17,128 +19,78 @@ const submitAnswersSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    // Parse and validate request body
     const body = await request.json();
     const { quizId, userId, answers, isComplete } =
       submitAnswersSchema.parse(body);
 
-    // Get quiz by UUID
-    const quiz = await quizRepository.getByUuid(quizId);
+    // Initialize services
+    const quizService = new QuizService();
+    const answerService = new QuizAnswerService();
+
+    // Get quiz data
+    const quiz = await quizService.getQuizById(quizId);
     if (!quiz) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
     }
 
-    // Process each answer
-    const processedAnswers = [];
-    let correctCount = 0;
-    const totalQuestions = answers.length;
-
-    // Get all questions from the quiz
-    for (const answerItem of answers) {
-      const { questionId, answer } = answerItem;
-      const questionInQuiz = quiz.questions.find(
-        (q) => q.question.uuid === questionId
+    // Check if quiz is already completed
+    if (quiz.isCompleted) {
+      return NextResponse.json(
+        { error: "Cannot update answers for completed quiz" },
+        { status: 400 }
       );
-
-      if (!questionInQuiz) {
-        continue; // Skip if question not found in quiz
-      }
-
-      const question = questionInQuiz.question;
-
-      // Process single or multiple answers
-      let isCorrect = false;
-      if (question.hasMultipleCorrectAnswers) {
-        // For multiple answer questions - check if all correct options are selected and no incorrect ones
-        const correctOptions = question.options
-          .filter((o) => o.isCorrect)
-          .map((o) => o.id.toString());
-        isCorrect =
-          answer.length === correctOptions.length &&
-          correctOptions.every((id) => answer.includes(id));
-      } else {
-        // For single answer questions
-        isCorrect =
-          answer.length === 1 &&
-          question.options.some(
-            (o) => o.id.toString() === answer[0] && o.isCorrect
-          );
-      }
-
-      // Update the answer in the database
-      await quizRepository.updateQuizAnswer(
-        quiz.id,
-        question.id.toString(), // Use database ID, not UUID
-        parseInt(answer[0], 10), // Parse the answer ID to number with base 10
-        isCorrect
-      );
-
-      if (isCorrect) {
-        correctCount++;
-      }
-
-      processedAnswers.push({
-        questionId,
-        isCorrect,
-      });
     }
 
-    // If the quiz is marked as complete, update its status
-    if (isComplete) {
-      const score = Math.round((correctCount / totalQuestions) * 100);
+    // Verify question IDs match between client and server
+    const clientQuestionIds = new Set(answers.map((a) => a.questionId));
+    const serverQuestionIds = new Set(quiz.questions.map((q) => q.questionId));
 
-      // Calculate topic performance
-      const topicPerformance: Record<
-        string,
-        { correct: number; total: number }
-      > = {};
-
-      for (const qItem of quiz.questions) {
-        const topic = qItem.question.topic;
-        if (!topicPerformance[topic]) {
-          topicPerformance[topic] = { correct: 0, total: 0 };
-        }
-
-        const answer = processedAnswers.find(
-          (a) => a.questionId === qItem.question.uuid
+    // Log any questions that don't match
+    clientQuestionIds.forEach((id) => {
+      if (!serverQuestionIds.has(id)) {
+        debug.error(
+          `Client sent question ID ${id} that doesn't exist in the server quiz`
         );
-        if (answer) {
-          topicPerformance[topic].total++;
-          if (answer.isCorrect) {
-            topicPerformance[topic].correct++;
-          }
-        }
       }
+    });
 
-      // Format topic performance for the repository
-      const topicPerformanceData = Object.entries(topicPerformance).map(
-        ([topic, data]) => ({
-          topic,
-          correct: data.correct,
-          total: data.total,
-          percentage: Math.round((data.correct / data.total) * 100),
-        })
+    // Process quiz answers
+    debug.log(`Processing ${answers.length} answers for quiz ${quizId}`);
+    const { correctCount, processedAnswers, questionMap } =
+      await answerService.processAnswers(quiz, answers);
+
+    // Complete the quiz if requested
+    if (isComplete) {
+      const topicPerformance = answerService.calculateTopicPerformance(
+        quiz,
+        questionMap
       );
-
-      // Complete the quiz
-      await quizRepository.completeQuiz(quiz.id, score, topicPerformanceData);
+      await quizService.completeQuiz(
+        quiz.id,
+        correctCount,
+        quiz.questions.length,
+        topicPerformance
+      );
     }
 
+    // Return the results
     return NextResponse.json({
       success: true,
       processed: processedAnswers.length,
       correct: correctCount,
       score: isComplete
-        ? Math.round((correctCount / totalQuestions) * 100)
+        ? quizService.calculateScore(correctCount, quiz.questions.length)
         : null,
     });
   } catch (error) {
-    console.error("Error saving quiz answers:", error);
+    debug.error("Error processing quiz answers:", error);
     return NextResponse.json(
       {
         error:
           error instanceof Error
             ? error.message
-            : "Failed to save quiz answers",
+            : "Failed to process quiz answers",
       },
       { status: 500 }
     );

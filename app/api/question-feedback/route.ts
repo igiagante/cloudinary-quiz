@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
 
     // Find the question in the database
     const question = await db.query.questions.findFirst({
-      where: eq(questions.uuid, questionId),
+      where: eq(questions.id, questionId),
     });
 
     if (!question) {
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
         qualityScore,
         updatedAt: new Date(),
       })
-      .where(eq(questions.uuid, questionId));
+      .where(eq(questions.id, questionId));
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -87,17 +87,73 @@ function parseQuiz(content: string): QuizQuestion[] {
 
     // Find answer in answers section
     let correctIndices = [0]; // Default to first option
+    let explanation = null;
 
     if (answersSection) {
-      const answerRegex = new RegExp(
-        `${questionNum}\\.\\s+([A-E](?:,\\s*[A-E])*)\\s+-`
-      );
-      const answerMatch = answersSection.match(answerRegex);
+      // Process answers section more intelligently
+      const answerParagraphs = answersSection.split(/\n\n+/);
 
-      if (answerMatch) {
-        const answerPart = answerMatch[1];
-        const letters = answerPart.split(/,\s*/).map((s) => s.trim());
-        correctIndices = letters.map((letter) => letter.charCodeAt(0) - 65); // A->0, B->1, etc.
+      // First, try to find the answer line for this question
+      let answerLineIndex = -1;
+      for (let j = 0; j < answerParagraphs.length; j++) {
+        const paragraph = answerParagraphs[j].trim();
+        const answerMatch = paragraph.match(
+          new RegExp(`^${questionNum}\\.\\s+([A-Z](?:,\\s*[A-E])*)\\s+-`)
+        );
+
+        if (answerMatch) {
+          answerLineIndex = j;
+
+          // Extract the correct answers
+          const answerPart = answerMatch[1];
+          const letters = answerPart.split(/,\s*/).map((s) => s.trim());
+          correctIndices = letters.map((letter) => letter.charCodeAt(0) - 65); // A->0, B->1, etc.
+
+          // Check if explanation is in the same paragraph
+          if (paragraph.includes("**Explanation:**")) {
+            const parts = paragraph.split("**Explanation:**");
+            if (parts.length > 1) {
+              explanation = parts[1].trim();
+            }
+          }
+          // Check if the explanation is in the next paragraph
+          else if (
+            j + 1 < answerParagraphs.length &&
+            answerParagraphs[j + 1].includes("**Explanation:**")
+          ) {
+            const nextParagraph = answerParagraphs[j + 1].trim();
+            const parts = nextParagraph.split("**Explanation:**");
+            if (parts.length > 1) {
+              explanation = parts[1].trim();
+            }
+          }
+
+          break;
+        }
+      }
+
+      // Fallback to the old method if needed
+      if (answerLineIndex === -1) {
+        const answerRegex = new RegExp(
+          `${questionNum}\\.\\s+([A-E](?:,\\s*[A-E])*)\\s+-`
+        );
+        const answerMatch = answersSection.match(answerRegex);
+
+        if (answerMatch) {
+          const answerPart = answerMatch[1];
+          const letters = answerPart.split(/,\s*/).map((s) => s.trim());
+          correctIndices = letters.map((letter) => letter.charCodeAt(0) - 65); // A->0, B->1, etc.
+
+          // Extract explanation for this question
+          const explanationRegex = new RegExp(
+            `${questionNum}\\..*?\\*\\*Explanation:\\*\\*\\s*([\\s\\S]*?)(?:\\n\\n\\d+\\.|$)`,
+            "m"
+          );
+          const explanationMatch = answersSection.match(explanationRegex);
+          if (explanationMatch) {
+            explanation = explanationMatch[1].trim();
+          }
+        }
       }
     }
 
@@ -119,7 +175,7 @@ function parseQuiz(content: string): QuizQuestion[] {
       topicId: 2, // Default topic ID for single-topic quizzes
       difficulty: difficulty,
       source: "markdown",
-      explanation: null,
+      explanation: explanation,
     });
   }
 
@@ -181,17 +237,73 @@ function parseQuizWithMultipleTopics(content: string): QuizQuestion[] {
 
       // Find answer in answers section
       let correctIndices = [0]; // Default to first option
+      let explanation = null;
 
       if (section.includes("Answers")) {
-        const answerRegex = new RegExp(
-          `${questionNum}\\.\\s+([A-E](?:,\\s*[A-E])*)\\s+-`
-        );
-        const answerMatch = section.match(answerRegex);
+        // Process answers section more intelligently
+        const answerParagraphs = section.split(/\n\n+/);
 
-        if (answerMatch) {
-          const answerPart = answerMatch[1];
-          const letters = answerPart.split(/,\s*/).map((s) => s.trim());
-          correctIndices = letters.map((letter) => letter.charCodeAt(0) - 65); // A->0, B->1, etc.
+        // First, try to find the answer line for this question
+        let answerLineIndex = -1;
+        for (let k = 0; k < answerParagraphs.length; k++) {
+          const paragraph = answerParagraphs[k].trim();
+          const answerMatch = paragraph.match(
+            new RegExp(`^${questionNum}\\.\\s+([A-Z](?:,\\s*[A-E])*)\\s+-`)
+          );
+
+          if (answerMatch) {
+            answerLineIndex = k;
+
+            // Extract the correct answers
+            const answerPart = answerMatch[1];
+            const letters = answerPart.split(/,\s*/).map((s) => s.trim());
+            correctIndices = letters.map((letter) => letter.charCodeAt(0) - 65); // A->0, B->1, etc.
+
+            // Check if explanation is in the same paragraph
+            if (paragraph.includes("**Explanation:**")) {
+              const parts = paragraph.split("**Explanation:**");
+              if (parts.length > 1) {
+                explanation = parts[1].trim();
+              }
+            }
+            // Check if the explanation is in the next paragraph
+            else if (
+              k + 1 < answerParagraphs.length &&
+              answerParagraphs[k + 1].includes("**Explanation:**")
+            ) {
+              const nextParagraph = answerParagraphs[k + 1].trim();
+              const parts = nextParagraph.split("**Explanation:**");
+              if (parts.length > 1) {
+                explanation = parts[1].trim();
+              }
+            }
+
+            break;
+          }
+        }
+
+        // Fallback to the old method if needed
+        if (answerLineIndex === -1) {
+          const answerRegex = new RegExp(
+            `${questionNum}\\.\\s+([A-E](?:,\\s*[A-E])*)\\s+-`
+          );
+          const answerMatch = section.match(answerRegex);
+
+          if (answerMatch) {
+            const answerPart = answerMatch[1];
+            const letters = answerPart.split(/,\s*/).map((s) => s.trim());
+            correctIndices = letters.map((letter) => letter.charCodeAt(0) - 65); // A->0, B->1, etc.
+
+            // Extract explanation for this question
+            const explanationRegex = new RegExp(
+              `${questionNum}\\..*?\\*\\*Explanation:\\*\\*\\s*([\\s\\S]*?)(?:\\n\\n\\d+\\.|$)`,
+              "m"
+            );
+            const explanationMatch = section.match(explanationRegex);
+            if (explanationMatch) {
+              explanation = explanationMatch[1].trim();
+            }
+          }
         }
       }
 
@@ -213,7 +325,7 @@ function parseQuizWithMultipleTopics(content: string): QuizQuestion[] {
         topicId: 2, // Default topic ID for single-topic quizzes
         difficulty: difficulty,
         source: "markdown",
-        explanation: null,
+        explanation: explanation,
       });
     }
   }

@@ -1,8 +1,10 @@
 // app/api/quizzes/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { quizRepository } from "@/lib/db/repositories/quiz.repository";
-import { questionRepository } from "@/lib/db/repositories/question.repository";
+import { getTestUserId } from "@/lib/utils";
+import { closeConnection } from "@/lib/db";
+import { QuizService } from "@/lib/services/quiz.service";
+import { debug } from "@/lib/debug";
 
 // Input validation schema for creating a quiz
 const createQuizSchema = z.object({
@@ -10,100 +12,84 @@ const createQuizSchema = z.object({
   numQuestions: z.number().min(1).max(30).default(10),
   topics: z.array(z.string()).optional(),
   difficulty: z.enum(["easy", "medium", "hard"]).optional(),
+  questionIds: z.array(z.string()).optional(), // Allow passing specific question IDs
 });
 
 export async function POST(request: NextRequest) {
   try {
+    // Parse request body
     const body = await request.json();
-    const {
-      userId: userIdStr,
-      numQuestions,
-      topics,
-      difficulty,
-    } = createQuizSchema.parse(body);
+    const { userId, numQuestions, topics, difficulty, questionIds } =
+      createQuizSchema.parse(body);
 
-    // Convert userId from string to number if present
-    const userId = userIdStr ? parseInt(userIdStr, 10) : undefined;
-    if (userIdStr && isNaN(userId!)) {
+    // Use the test user ID if not provided
+    const effectiveUserId = userId || getTestUserId();
+
+    if (!effectiveUserId) {
       return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
     }
 
-    // Get questions from the database
-    let questions;
-    if (topics && topics.length > 0) {
-      questions = await questionRepository.getByTopicAndDifficulty(
-        topics,
-        difficulty,
-        numQuestions
-      );
-    } else {
-      // Get random questions
-      const allTopics = await questionRepository.getAllTopics();
-      questions = await questionRepository.getByTopicAndDifficulty(
-        allTopics,
-        difficulty,
-        numQuestions
-      );
-    }
-
-    // If we don't have enough questions, return an error
-    if (questions.length < numQuestions) {
-      return NextResponse.json(
-        {
-          error: `Not enough questions available. Requested ${numQuestions}, found ${questions.length}`,
-        },
-        { status: 400 }
-      );
-    }
-
-    // Create a new quiz with the selected questions
-    const questionIds = questions.map((q) => q.id.toString());
-    const quizId = await quizRepository.create({
-      userId: userIdStr,
+    // Use the QuizService to create the quiz
+    const quizService = new QuizService();
+    const result = await quizService.createQuiz({
+      userId: effectiveUserId,
       numQuestions,
+      topics,
+      difficulty,
       questionIds,
     });
 
-    return NextResponse.json({ quizId });
+    return NextResponse.json(result);
   } catch (error) {
-    console.error("Error creating quiz:", error);
+    debug.error("Error creating quiz:", error);
     return NextResponse.json(
-      { error: "Failed to create quiz" },
+      {
+        error: error instanceof Error ? error.message : "Failed to create quiz",
+      },
       { status: 500 }
     );
+  } finally {
+    // Ensure connection is closed
+    await closeConnection();
   }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const quizId = searchParams.get("id");
-    const userId = searchParams.get("userId");
+    const url = new URL(request.url);
+    const quizId = url.searchParams.get("id");
+    const userId = url.searchParams.get("userId");
+
+    const quizService = new QuizService();
 
     if (quizId) {
-      // Get a specific quiz
-      const quiz = await quizRepository.getByUuid(quizId);
-
+      // Get a specific quiz by ID
+      const quiz = await quizService.getQuizById(quizId);
       if (!quiz) {
         return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
       }
-
-      return NextResponse.json({ quiz });
+      return NextResponse.json(quiz);
     } else if (userId) {
       // Get quiz history for a user
-      const quizHistory = await quizRepository.getQuizHistory(userId);
+      const quizHistory = await quizService.getQuizHistoryByUser(userId);
       return NextResponse.json({ quizHistory });
     } else {
       return NextResponse.json(
-        { error: "User ID is required" },
+        { error: "Missing id or userId parameter" },
         { status: 400 }
       );
     }
   } catch (error) {
-    console.error("Error fetching quiz data:", error);
+    debug.error("Error fetching quizzes:", error);
     return NextResponse.json(
-      { error: "Failed to fetch quiz data" },
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to fetch quizzes",
+      },
       { status: 500 }
     );
+  } finally {
+    // Close connection after request is done
+    await closeConnection();
   }
 }

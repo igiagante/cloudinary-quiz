@@ -1,11 +1,12 @@
 import * as fs from "fs";
 import * as path from "path";
 import { TopicMetadata } from "@/lib/types";
+import { Topic } from "@/types";
 
 /**
  * Parses the topics.md file to extract topic metadata
  */
-export function parseTopics(): TopicMetadata[] {
+export function parseTopicsMetadata(): TopicMetadata[] {
   const topicsPath = path.join(process.cwd(), "lib/db/topics.md");
   const content = fs.readFileSync(topicsPath, "utf8");
 
@@ -43,10 +44,10 @@ export function parseTopics(): TopicMetadata[] {
  * Calculates how many questions should be allocated to each topic
  * based on the max_points weighting
  */
-export function distributeQuestionsByTopic(
+export function distributeQuestionsByWeight(
   totalQuestions: number
 ): Record<number, number> {
-  const topicsData = parseTopics();
+  const topicsData = parseTopicsMetadata();
   const totalPoints = topicsData.reduce(
     (sum, topic) => sum + topic.maxPoints,
     0
@@ -73,6 +74,72 @@ export function distributeQuestionsByTopic(
     for (let i = 0; i < remaining; i++) {
       distribution[sortedTopics[i % sortedTopics.length].id]++;
     }
+  }
+
+  return distribution;
+}
+
+/**
+ * This function parses topic strings and handles any conversion required
+ * between the full topic names used in the UI and the database format.
+ */
+export function parseTopics(topics: string[]): string[] {
+  if (!topics || !Array.isArray(topics) || topics.length === 0) {
+    return [];
+  }
+
+  // Validate topics and ensure they're properly formatted
+  return topics
+    .map((topic) => {
+      // Ensure the topic is trimmed and a valid string
+      if (typeof topic === "string") {
+        return topic.trim();
+      }
+      console.warn(`Invalid topic value: ${topic}`);
+      return "";
+    })
+    .filter((topic) => topic !== "");
+}
+
+/**
+ * Distribute questions based on topics and total question count
+ */
+export function distributeQuestionsByTopic(
+  topics: string[],
+  totalQuestions: number
+): Record<string, number> {
+  if (!topics || topics.length === 0) {
+    return {};
+  }
+
+  const validTopics = parseTopics(topics);
+  if (validTopics.length === 0) {
+    return {};
+  }
+
+  // Create even distribution
+  const distribution: Record<string, number> = {};
+
+  // Minimum questions per topic
+  const questionsPerTopic = Math.max(
+    1,
+    Math.floor(totalQuestions / validTopics.length)
+  );
+
+  // Assign base number to each topic
+  validTopics.forEach((topic) => {
+    distribution[topic] = questionsPerTopic;
+  });
+
+  // Distribute any remaining questions
+  let remaining = totalQuestions - questionsPerTopic * validTopics.length;
+  let index = 0;
+
+  while (remaining > 0) {
+    const topic = validTopics[index % validTopics.length];
+    distribution[topic]++;
+    remaining--;
+    index++;
   }
 
   return distribution;

@@ -1,5 +1,5 @@
 {
-  "id": "e0380280-29d0-4a2b-9b11-9aed5cea5d78",
+  "id": "c2b2fc73-27a9-446f-bf0b-9a83b15b1b53",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "5",
   "dialect": "pg",
@@ -16,7 +16,7 @@
         },
         "question_id": {
           "name": "question_id",
-          "type": "text",
+          "type": "varchar(21)",
           "primaryKey": false,
           "notNull": true
         },
@@ -65,16 +65,9 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "varchar(21)",
           "primaryKey": true,
           "notNull": true
-        },
-        "uuid": {
-          "name": "uuid",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false,
-          "default": "gen_random_uuid()"
         },
         "question": {
           "name": "question",
@@ -224,13 +217,13 @@
         },
         "quiz_id": {
           "name": "quiz_id",
-          "type": "integer",
+          "type": "varchar(21)",
           "primaryKey": false,
           "notNull": true
         },
         "question_id": {
           "name": "question_id",
-          "type": "text",
+          "type": "varchar(21)",
           "primaryKey": false,
           "notNull": true
         },
@@ -305,21 +298,15 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "serial",
+          "type": "varchar(21)",
           "primaryKey": true,
-          "notNull": true
-        },
-        "uuid": {
-          "name": "uuid",
-          "type": "varchar(36)",
-          "primaryKey": false,
           "notNull": true
         },
         "user_id": {
           "name": "user_id",
-          "type": "text",
+          "type": "varchar(128)",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "num_questions": {
           "name": "num_questions",
@@ -378,15 +365,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "quizzes_uuid_unique": {
-          "name": "quizzes_uuid_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "uuid"
-          ]
-        }
-      }
+      "uniqueConstraints": {}
     },
     "topic_performance": {
       "name": "topic_performance",
@@ -400,7 +379,7 @@
         },
         "quiz_id": {
           "name": "quiz_id",
-          "type": "integer",
+          "type": "varchar(21)",
           "primaryKey": false,
           "notNull": true
         },
@@ -515,7 +494,7 @@
         },
         "user_id": {
           "name": "user_id",
-          "type": "text",
+          "type": "varchar(21)",
           "primaryKey": false,
           "notNull": true
         },
@@ -582,14 +561,8 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "text",
+          "type": "varchar(128)",
           "primaryKey": true,
-          "notNull": true
-        },
-        "uuid": {
-          "name": "uuid",
-          "type": "varchar(36)",
-          "primaryKey": false,
           "notNull": true
         },
         "email": {
@@ -636,13 +609,6 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "users_uuid_unique": {
-          "name": "users_uuid_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "uuid"
-          ]
-        },
         "users_email_unique": {
           "name": "users_email_unique",
           "nullsNotDistinct": false,

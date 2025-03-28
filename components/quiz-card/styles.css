@@ -1,0 +1,143 @@
+/* Quiz Card Styles */
+
+/* Code block styles */
+.quiz-card pre {
+  margin: 0;
+  width: 100%;
+}
+
+.quiz-card pre code {
+  display: block;
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.quiz-card .code-block {
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  border: 1px solid #333;
+  border-radius: 4px;
+  margin-bottom: 0.5rem;
+  width: 100%;
+  min-width: 300px;
+}
+
+/* Highlight.js overrides */
+.hljs {
+  display: block !important;
+  overflow-x: auto !important;
+  padding: 1rem !important;
+  background: #1e1e1e !important;
+  color: #d4d4d4 !important;
+  font-family: "Consolas", "Monaco", "Courier New", monospace !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+  border-radius: 0.375rem !important;
+  margin-top: 0.5rem !important;
+  white-space: pre !important;
+}
+
+/* Syntax highlighting colors */
+.quiz-card .keyword {
+  color: #569cd6;
+}
+
+.quiz-card .string {
+  color: #ce9178;
+}
+
+.quiz-card .number {
+  color: #b5cea8;
+}
+
+.quiz-card .property {
+  color: #9cdcfe;
+}
+
+/* Special strings for different code elements */
+.quiz-card pre code .cloudinary {
+  color: #569cd6;
+}
+.quiz-card pre code .url {
+  color: #9cdcfe;
+}
+.quiz-card pre code .effect {
+  color: #9cdcfe;
+}
+.quiz-card pre code .radius {
+  color: #9cdcfe;
+}
+.quiz-card pre code .border {
+  color: #9cdcfe;
+}
+.quiz-card pre code .str {
+  color: #ce9178;
+}
+.quiz-card pre code .num {
+  color: #b5cea8;
+}
+.quiz-card pre code .object {
+  color: #4ec9b0;
+}
+
+/* Option layout styles */
+.quiz-option {
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: block !important;
+  width: 100% !important;
+}
+
+.quiz-option > div {
+  width: 100% !important;
+  display: flex !important;
+  align-items: flex-start !important;
+}
+
+/* Code block display */
+.code-block {
+  width: 100% !important;
+  display: block !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+}
+
+.quiz-card pre {
+  margin: 0 !important;
+  padding: 0.75rem !important;
+  width: 100% !important;
+  overflow-x: auto !important;
+  display: block !important;
+  line-height: 1.4 !important;
+}
+
+.quiz-card pre code {
+  display: block !important;
+  white-space: pre !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  font-family: "Consolas", "Monaco", "Courier New", monospace !important;
+  line-height: 1.4 !important;
+  padding: 0 !important;
+}
+
+/* Ensure no extra space between lines */
+.quiz-card pre code span {
+  display: inline !important;
+  white-space: pre !important;
+  line-height: inherit !important;
+}
+
+/* Fix code block spacing */
+.quiz-card .code-block pre {
+  margin: 0 !important;
+  padding: 0.75rem !important;
+}
+
+.quiz-card .code-block pre code {
+  margin: 0 !important;
+  padding: 0 !important;
+}

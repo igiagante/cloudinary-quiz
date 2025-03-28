@@ -197,18 +197,83 @@ E) Setting image dimension limits
 
 ## Answers
 
-1. B - The chunk_size parameter enables uploading large files in chunks.
-2. B - Signed uploads with authentication signatures provide the highest level of security.
-3. B - Using the Upload API with concurrent uploads from a dedicated migration script is the most efficient approach for large-scale migrations.
-4. A, B, C - Server-side upload, direct browser upload, and auto-upload from remote URLs are all valid upload methods.
-5. B - Option B correctly configures the SDK with credentials and then performs a standard upload.
-6. D - Upload with the overwrite flag (overwrite=true) will replace an existing asset while maintaining derived assets.
-7. A, B - The timestamp and public_id (if used) must be included in the signature calculation for secure uploads.
-8. C - Using remote URL upload with YouTube video URLs is the recommended approach.
-9. A, B, C, D, E - Cloudinary supports direct upload of images, videos, PDFs, audio files, and raw files.
-10. A, B, D, E - Using exponential backoff, queue-based uploads, obtaining a rate limit increase, and uploading during off-peak hours all help prevent rate limiting issues.
-11. D - Generating a signed upload URL from your backend server is the most secure approach for mobile apps.
-12. C - By default, the existing asset is replaced when uploading with the same public ID.
-13. B - Lazy migration is most appropriate for infrequently accessed archival images.
-14. D - Chunked uploads with resumable transfer capability provide the most effective resilience against network failures in high-throughput systems.
-15. A, B, E - Setting allowed file types, maximum file size limits, and image dimension limits can enforce upload restrictions.
+1. B - chunk_size.
+
+**Explanation:** The `chunk_size` parameter enables Cloudinary's chunked upload capability, which breaks large files into smaller segments for transmission. This approach improves reliability for large file uploads by allowing resume capability after network interruptions and provides progress tracking during upload.
+
+2. B - Using signed uploads with authentication signatures.
+
+**Explanation:** Signed uploads provide the highest security level because they cryptographically verify upload requests using your API secret without exposing it in client code. The signature ensures the upload parameters haven't been tampered with and that the upload is authorized by your application.
+
+3. B - Using the Upload API with concurrent uploads from a dedicated migration script.
+
+**Explanation:** For large-scale migrations (500,000 images), a dedicated script using the Upload API with controlled concurrency provides the best balance of speed, reliability, and control. This approach allows for error handling, retries, progress tracking, and optimization of the migration process while leveraging Cloudinary's API capabilities.
+
+4. A - Server-side upload using the SDK.
+   B - Direct browser-to-Cloudinary upload.
+   C - Auto-upload from a remote URL.
+
+**Explanation:** Cloudinary supports these three primary upload methods. Server-side uploads using the SDK provide security and control, direct browser uploads improve performance by bypassing your servers, and remote URL uploads allow importing content directly from other web locations without downloading first.
+
+5. B -
+
+```javascript
+cloudinary.config({
+  cloud_name: "your_cloud",
+  api_key: "YOUR_API_KEY",
+  api_secret: "YOUR_API_SECRET",
+});
+cloudinary.uploader.upload("sample.jpg", { public_id: "sample_id" });
+```
+
+**Explanation:** This code correctly implements a secure server-side upload. It first configures the SDK with proper credentials (cloud name, API key, and API secret) and then performs the upload operation. This approach keeps credentials secure on the server while providing full upload functionality.
+
+6. D - upload with overwrite flag.
+
+**Explanation:** Using the upload method with `overwrite: true` parameter is the most direct way to replace an existing asset while maintaining the same public ID. This approach preserves all derived assets and transformations associated with the original public ID, ensuring continuity while updating the base asset.
+
+7. A - timestamp.
+   B - public_id (if specifying a custom public ID).
+
+**Explanation:** When generating a signature for secure uploads, the timestamp is always required to prevent replay attacks, and the public_id must be included in the signature if you're specifying a custom one. These parameters must match exactly between the signature calculation and the actual upload request.
+
+8. C - Use the remote URL upload feature with YouTube video URLs.
+
+**Explanation:** Cloudinary's remote URL upload feature can directly import videos from YouTube URLs, handling all the downloading and processing automatically. This approach is more efficient than manual downloading and uploading, and doesn't require additional add-ons or configurations.
+
+9. A - Images.
+   B - Videos.
+   C - PDFs.
+   D - Audio files.
+   E - Raw files (like text, JSON, XML).
+
+**Explanation:** Cloudinary supports uploading all these file types directly. Images and videos receive specialized processing and transformation capabilities, PDFs can be manipulated and converted, audio files can be transcoded, and raw files can be stored and delivered without modifications.
+
+10. A - Use exponential backoff for retries.
+    B - Implement queue-based uploads with controlled concurrency.
+    D - Obtain a temporary rate limit increase from Cloudinary support.
+    E - Upload during off-peak hours.
+
+**Explanation:** These approaches help prevent rate limiting during large-scale migrations. Exponential backoff intelligently handles intermittent failures, queue-based uploads control the request rate, obtaining a temporary rate limit increase provides additional capacity, and off-peak uploads reduce competition with normal operations.
+
+11. D - Generate a signed upload URL from your backend server.
+
+**Explanation:** This approach provides the best security for mobile applications. The backend server generates a time-limited signature using the API secret (which remains secure on the server), and the mobile app uses this signature to upload directly to Cloudinary. This prevents exposing API credentials in the mobile app while enabling direct uploads.
+
+12. C - The existing asset is replaced.
+
+**Explanation:** By default, Cloudinary replaces the existing asset when a new file is uploaded with the same public ID. This behavior can be modified with parameters like `use_filename`, `unique_filename`, or by checking for existing assets before uploading, but the default behavior is replacement.
+
+13. B - Lazy migration that uploads assets only when they are first requested.
+
+**Explanation:** For rarely accessed archival images, lazy migration provides the optimal balance between storage costs and migration effort. This approach only transfers assets when they're actually needed, avoiding unnecessary migration of images that may never be accessed. It requires setting up a fallback mechanism that checks for missing assets and uploads them on first access.
+
+14. D - Chunked uploads with resumable transfer capability.
+
+**Explanation:** For high-throughput systems requiring network resilience, chunked uploads with resume capability provide the best solution. This approach breaks files into smaller segments that can be transferred independently, allowing uploads to pause and resume at the chunk level rather than restarting the entire file transfer after a failure.
+
+15. A - Setting allowed file types using upload presets.
+    B - Implementing maximum file size limits.
+    E - Setting image dimension limits.
+
+**Explanation:** These methods effectively restrict user-generated content uploads. Upload presets can limit allowed file types by format and MIME type, maximum file size limits prevent excessively large uploads, and dimension limits can prevent uploads of images that are too small or too large for your application's requirements.

@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
     if (quizId) {
       // Get a specific quiz
-      const quiz = await quizRepository.getByUuid(quizId);
+      const quiz = await quizRepository.getById(quizId);
     } else if (userId) {
       // Get quiz history for a user
       const quizHistory = await quizRepository.getQuizHistory(userId);

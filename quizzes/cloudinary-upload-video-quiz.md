@@ -444,18 +444,160 @@ D) Stream the video directly to Cloudinary as it's being recorded
 
 ## Answers
 
-1. B - The chunk_size parameter enables uploading large files in chunks.
-2. B - Signed uploads with authentication signatures provide the highest level of security.
-3. C - The SDK generates an HTML5 video tag with three source elements for mp4, webm and ogv formats.
-4. B - Using the Upload API with concurrent uploads from a dedicated migration script is the most efficient approach for large-scale migrations.
-5. A, B, C - Server-side upload, direct browser upload, and auto-upload from remote URLs are all valid upload methods.
-6. A - The SDK generates a basic video tag with three source elements specifying the background and padding transformations.
-7. B - Option B correctly configures the SDK with credentials and then performs a standard upload.
-8. D - Upload with the overwrite flag (overwrite=true) will replace an existing asset while maintaining derived assets.
-9. A, C - Using `eager=[{format: "gif", transformation: "vs_30"}]` and `eager_async: true` for background processing.
-10. C - Using remote URL upload with YouTube video URLs is the recommended approach.
-11. A, B, C, D, E - Cloudinary supports direct upload of images, videos, PDFs, audio files, and raw files.
-12. B - Lazy migration is most appropriate for infrequently accessed archival video content.
-13. A, C - Chunked uploading and configuring higher timeouts are required for large video files.
-14. C - The `explicit("video_id", {resource_type: "video", eager: [{format: "jpg", start_offset: "5"}]})` method with eager transformations can generate thumbnails at specific times.
-15. A - Direct browser upload with progress indicator provides the best balance of performance and user experience.
+1. B - chunk_size.
+
+**Explanation:** The `chunk_size` parameter enables Cloudinary's chunked upload capability for large video files. This approach breaks large videos into smaller segments that can be uploaded independently, providing better reliability for large files, upload progress tracking, and the ability to resume uploads after network interruptions.
+
+2. B - Using signed uploads with authentication signatures.
+
+**Explanation:** Signed uploads provide the highest level of security by cryptographically verifying that upload requests are authorized. This approach uses your API secret to generate a signature without exposing the secret in client code, ensuring the upload parameters haven't been tampered with and the upload is authorized by your application.
+
+3. C -
+
+```html
+<video controls>
+  <source
+    src="https://res.cloudinary.com/demo/video/upload/h_250,w_400,c_fill/training_video.mp4"
+    type="video/mp4"
+  />
+  <source
+    src="https://res.cloudinary.com/demo/video/upload/h_250,w_400,c_fill/training_video.webm"
+    type="video/webm"
+  />
+  <source
+    src="https://res.cloudinary.com/demo/video/upload/h_250,w_400,c_fill/training_video.ogv"
+    type="video/ogg"
+  />
+  Your browser does not support HTML5 video
+</video>
+```
+
+**Explanation:** The Cloudinary SDK's video method generates a standard HTML5 video element with multiple source elements for different formats (MP4, WebM, OGV) to ensure cross-browser compatibility. It includes the transformation parameters in the URL and the fallback content for browsers that don't support HTML5 video.
+
+4. B - Using the Upload API with concurrent uploads from a dedicated migration script.
+
+**Explanation:** For migrating 500,000 images, a dedicated script using the Upload API with controlled concurrency provides the optimal approach. This method allows for parallel processing with error handling, retries, progress tracking, and can be optimized for throughput while respecting API rate limits.
+
+5. A -
+
+```javascript
+cloudinary.uploader.upload("local_file.jpg", options);
+```
+
+B -
+
+```javascript
+cloudinary.unsigned_upload("file", "upload_preset");
+```
+
+C -
+
+```javascript
+cloudinary.uploader.upload("https://example.com/image.jpg");
+```
+
+**Explanation:** Cloudinary supports these three upload methods: server-side uploads of local files using the SDK (A), unsigned uploads from the browser using upload presets (B), and remote URL uploads that fetch content from other web locations (C). Options D and E are incorrect - Cloudinary doesn't support FTP uploads, and option E is just showing a notification URL parameter, not a different upload method.
+
+6. A -
+
+```html
+<video width="300" height="200">
+  <source
+    src="https://res.cloudinary.com/demo/video/upload/b_lightblue,c_pad,h_200,w_300/ocean_scene.webm"
+    type="video/webm"
+  />
+  <source
+    src="https://res.cloudinary.com/demo/video/upload/b_lightblue,c_pad,h_200,w_300/ocean_scene.mp4"
+    type="video/mp4"
+  />
+  <source
+    src="https://res.cloudinary.com/demo/video/upload/b_lightblue,c_pad,h_200,w_300/ocean_scene.ogv"
+    type="video/ogg"
+  />
+</video>
+```
+
+**Explanation:** The SDK's video method with the specified parameters generates a standard HTML5 video element with width and height attributes. The sources array defines which video formats to include (WebM, MP4, OGV), and the background and crop parameters are included in the transformation URL, not as HTML attributes or CSS.
+
+7. B -
+
+```javascript
+cloudinary.config({
+  cloud_name: "your_cloud",
+  api_key: "YOUR_API_KEY",
+  api_secret: "YOUR_API_SECRET",
+});
+cloudinary.uploader.upload("sample.jpg", {
+  public_id: "sample_id",
+});
+```
+
+**Explanation:** This code correctly implements a secure server-side upload by first configuring the SDK with proper credentials (cloud name, API key, and API secret) and then performing the upload operation. This is the standard pattern for server-side uploads where the API secret remains secure on the server.
+
+8. D - upload with overwrite flag.
+
+**Explanation:** Using the upload method with `overwrite: true` parameter is the most direct way to replace an existing asset while maintaining the same public ID and all derived transformations. This approach preserves all derived assets and transformation history while updating the base asset.
+
+9. A -
+
+```javascript
+{
+  eager: [
+    {
+      format: "gif",
+      transformation: "vs_30",
+    },
+  ];
+}
+```
+
+C -
+
+```javascript
+{
+  eager_async: true;
+}
+```
+
+**Explanation:** To automatically generate an animated GIF preview from a video, you need to specify an eager transformation that converts to GIF format with the `vs_30` transformation (which creates a video sampling effect for animated GIFs). The `eager_async: true` parameter allows this potentially resource-intensive operation to happen in the background without blocking the upload response.
+
+10. C - Use the remote URL upload feature with YouTube video URLs.
+
+**Explanation:** Cloudinary's remote URL upload feature can directly import videos from YouTube URLs, handling all the downloading and processing automatically. This approach is more efficient than manual downloading and doesn't require additional add-ons or configurations.
+
+11. A - Images.
+    B - Videos.
+    C - PDFs.
+    D - Audio files.
+    E - Raw files (like text, JSON, XML).
+
+**Explanation:** Cloudinary supports direct upload of all these asset types. Images and videos receive specialized processing and transformation capabilities, PDFs can be manipulated and converted to images, audio files can be transcoded and streamed, and raw files can be stored and delivered without modifications.
+
+12. B - Lazy migration that uploads videos only when they are first requested.
+
+**Explanation:** For terabytes of infrequently accessed archival video content, lazy migration provides the optimal approach. This strategy only uploads videos when they're actually requested, avoiding unnecessary migration of content that may never be accessed. This saves both storage costs and migration effort while ensuring content is available when needed.
+
+13. A - Use chunked uploading with the chunk_size parameter.
+    C - Configure a higher timeout value for the upload request.
+
+**Explanation:** For videos larger than 100MB, chunked uploading is essential to ensure reliable transfers by breaking the file into smaller segments. Additionally, configuring higher timeout values prevents connection timeouts during the potentially lengthy upload process. The other options are not valid Cloudinary parameters or requirements.
+
+14. C -
+
+```javascript
+cloudinary.uploader.explicit("video_id", {
+  resource_type: "video",
+  eager: [
+    {
+      format: "jpg",
+      start_offset: "5",
+    },
+  ],
+});
+```
+
+**Explanation:** The `explicit` method with eager transformations is the correct approach for generating video thumbnails at specific times. The `start_offset` parameter specifies when in the video to capture the thumbnail, and setting `format: "jpg"` ensures the output is an image rather than a video segment.
+
+15. A - Direct browser-to-Cloudinary upload with upload progress indicator.
+
+**Explanation:** For user-uploaded videos, direct browser-to-Cloudinary upload with progress indication provides the best balance of performance and user experience. This approach bypasses your server for the actual file transfer (improving performance and reducing your bandwidth costs) while giving users visual feedback on the upload progress (improving user experience for large video files).

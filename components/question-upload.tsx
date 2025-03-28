@@ -1,11 +1,36 @@
 "use client";
 
 import React, { useState } from "react";
-import { QuestionInput } from "@/lib/db/repositories/question.repository";
-import {
-  Topics,
-  Difficulties,
-} from "@/lib/db/repositories/question.repository";
+import { Topic } from "@/types";
+
+// Define local types instead of importing from database
+interface QuestionOption {
+  text: string;
+  isCorrect: boolean;
+}
+
+export interface QuestionInput {
+  question: string;
+  options: QuestionOption[];
+  explanation: string;
+  topic: Topic;
+  difficulty: "easy" | "medium" | "hard";
+  source?: string;
+}
+
+// Topics and difficulties as constants
+const Topics = [
+  "Products, Value, Environment Settings, and Implementation Strategies",
+  "System Architecture",
+  "Media Lifecycle Strategy and Emerging Trends",
+  "Widgets, Out of Box Add-ons, Custom Integrations",
+  "Upload and Migrate Assets",
+  "Transformations",
+  "Media Management",
+  "User, Role, and Group Management and Access Controls",
+] as const;
+
+const Difficulties = ["easy", "medium", "hard"] as const;
 
 interface QuestionUploadProps {
   onQuestionsUploaded: (questions: QuestionInput[]) => void;
@@ -41,10 +66,8 @@ export default function QuestionUpload({
       // Validate questions format
       const validQuestions = questions.map((q: any) => {
         // Validate topic and difficulty
-        const topic = Object.values(Topics).includes(q.topic)
-          ? q.topic
-          : Topics[0];
-        const difficulty = Object.values(Difficulties).includes(q.difficulty)
+        const topic = Topics.includes(q.topic) ? q.topic : Topics[0];
+        const difficulty = Difficulties.includes(q.difficulty)
           ? q.difficulty
           : "medium";
 

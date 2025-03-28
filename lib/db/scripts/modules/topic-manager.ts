@@ -1,4 +1,4 @@
-import { parseTopics } from "../../parser/topic-parser";
+import { parseTopicsMetadata } from "../../parser/topic-parser";
 import { db, schema } from "./db";
 import { log, topicShortNames } from "./utils";
 
@@ -9,7 +9,7 @@ export async function seedTopics(): Promise<void> {
   try {
     log("Seeding topics from topics.md...", "blue");
 
-    const topicsData = parseTopics();
+    const topicsData = parseTopicsMetadata();
     let insertedCount = 0;
 
     // Insert each topic

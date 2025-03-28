@@ -5,9 +5,9 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { cloudinaryTopicList } from "@/types/constants";
 import { Topic } from "@/types";
-import { questionRepository } from "@/lib/db/repositories/question.repository";
 import AdminLink from "@/components/admin-link";
 import { v4 as uuidv4 } from "uuid";
+import { debug } from "@/lib/debug";
 
 export default function Home() {
   const router = useRouter();
@@ -27,6 +27,32 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
+    // Check if we need to clear an unfinished quiz
+    const quizState = localStorage.getItem("quizState");
+    if (quizState) {
+      try {
+        const parsedState = JSON.parse(quizState);
+        // If quiz is not complete, offer to clear it
+        if (
+          !parsedState.isComplete &&
+          parsedState.questions &&
+          parsedState.questions.length > 0
+        ) {
+          // Auto-clear unfinished quizzes to prevent state issues
+          localStorage.removeItem("quizState");
+          debug.log("Cleared unfinished quiz state on home page load");
+
+          // No need to remove quizId as it will be reused
+        }
+      } catch (e) {
+        // If there's any error parsing, clear it
+        localStorage.removeItem("quizState");
+        debug.error("Error parsing quiz state, cleared it:", e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     const fetchStats = async () => {
       try {
         const response = await fetch("/api/stats");
@@ -36,7 +62,7 @@ export default function Home() {
         const data = await response.json();
         setDbStats({ totalQuestions: data.totalQuestions });
       } catch (error) {
-        console.error("Error fetching stats:", error);
+        debug.error("Error fetching stats:", error);
         setDbStats({ totalQuestions: 0 });
       }
     };
@@ -58,6 +84,13 @@ export default function Home() {
 
   const handleStartQuiz = async () => {
     if (isGenerating) return;
+
+    // Validate topic selection
+    if (selectedTopics.length === 0) {
+      setError("Please select at least one topic before starting the quiz");
+      return;
+    }
+
     setIsGenerating(true);
     setError(null);
 
@@ -71,12 +104,9 @@ export default function Home() {
     };
 
     try {
-      // Create anonymous user if none exists
-      if (!localStorage.getItem("userId")) {
-        updateProgress("Creating anonymous user profile...");
-        const userId = uuidv4();
-        localStorage.setItem("userId", userId);
-      }
+      // Replace with your actual user ID from the database
+      const existingUserId = "a77c7b9b-aa9d-4f90-b70a-ab74206a7d8e";
+      localStorage.setItem("userId", existingUserId);
 
       // Save quiz settings to localStorage
       updateProgress("Saving quiz settings...");
@@ -105,13 +135,13 @@ export default function Home() {
       // Create a clean, properly typed request body
       const requestBody = {
         numQuestions: Number(numQuestions),
-        topics: selectedTopics.length > 0 ? selectedTopics : undefined,
+        topics: selectedTopics, // Always send selected topics, no undefined fallback
         difficulty: difficulty === "mixed" ? undefined : difficulty,
         model,
         maxNewQuestions,
       };
 
-      console.log("Sending request with body:", JSON.stringify(requestBody));
+      debug.log("Sending request with body:", JSON.stringify(requestBody));
 
       const response = await fetch("/api/generate-questions", {
         method: "POST",
@@ -140,12 +170,12 @@ export default function Home() {
         updateProgress(
           "Warning: No questions were generated. Please try again."
         );
-        console.error("No questions generated:", data);
+        debug.error("No questions generated:", data);
         throw new Error("No questions were generated");
       }
 
       // Log the structure of the first question to debug any issues
-      console.log(
+      debug.log(
         "First question structure:",
         JSON.stringify(questions[0], null, 2)
       );
@@ -159,36 +189,55 @@ export default function Home() {
         updateProgress(
           "Warning: Questions were generated but appear to be missing options."
         );
-        console.error("Question missing options:", questions[0]);
+        debug.error("Question missing options:", questions[0]);
       }
+
+      // After the first question structure console log, add this:
+      debug.log(
+        "Question IDs being sent to create quiz:",
+        JSON.stringify(
+          questions.map((q: { id: string }) => q.id),
+          null,
+          2
+        )
+      );
+
+      debug.log(
+        "Question IDs format from API:",
+        questions.map((q: { id: string }) => q.id)
+      );
 
       updateProgress("Quiz generation successful! Preparing your quiz...");
 
       // Create a quiz in the database
       updateProgress("Creating quiz in database...");
-      const userId = localStorage.getItem("userId");
       const createQuizResponse = await fetch("/api/quizzes", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId,
+          userId: existingUserId,
           numQuestions: questions.length,
-          questionIds: questions.map((q: any) => q.id),
+          questionIds: questions.map((q: { id: string }) => q.id),
         }),
       });
 
       if (!createQuizResponse.ok) {
         const errorData = await createQuizResponse.json();
-        console.error("Failed to create quiz in database:", errorData);
+        debug.error("Failed to create quiz in database:", errorData);
         updateProgress(
           "Warning: Failed to save quiz to database. Continuing anyway..."
         );
       } else {
         const quizData = await createQuizResponse.json();
         // Save the quiz ID to localStorage
-        localStorage.setItem("quizId", quizData.quizId);
+        localStorage.setItem(
+          "quizId",
+          typeof quizData.quizId === "object"
+            ? quizData.quizId.uuid || String(quizData.quizId)
+            : String(quizData.quizId)
+        );
         updateProgress("Quiz saved to database successfully!");
       }
 
@@ -201,16 +250,16 @@ export default function Home() {
       };
 
       // Debug multiple-answer questions
-      console.log("Quiz state being stored:", JSON.stringify(quizState));
+      debug.log("Quiz state being stored:", JSON.stringify(quizState));
       const multipleAnswerQuestions = questions.filter(
         (q: any) => q.hasMultipleCorrectAnswers
       );
-      console.log(
+      debug.log(
         `Found ${multipleAnswerQuestions.length} multiple-answer questions`
       );
       if (multipleAnswerQuestions.length > 0) {
         multipleAnswerQuestions.forEach((q: any, i: number) => {
-          console.log(`Multiple answer Q${i + 1}:`, {
+          debug.log(`Multiple answer Q${i + 1}:`, {
             question: q.question.substring(0, 50) + "...",
             hasFlag: q.hasMultipleCorrectAnswers,
             correctAnswers: q.correctAnswers,
@@ -225,7 +274,7 @@ export default function Home() {
       // Navigate to the quiz page
       router.push("/quiz");
     } catch (error) {
-      console.error("Error generating quiz:", error);
+      debug.error("Error generating quiz:", error);
       updateProgress(
         `Error: ${
           error instanceof Error ? error.message : "Something went wrong"
@@ -345,7 +394,7 @@ export default function Home() {
           </div>
           <div className="mt-2 text-sm text-gray-500">
             {selectedTopics.length === 0
-              ? "No topics selected (all topics will be used)"
+              ? "Please select at least one topic"
               : `${selectedTopics.length} topics selected`}
           </div>
         </div>
@@ -510,6 +559,29 @@ export default function Home() {
       </div>
 
       <AdminLink />
+
+      {/* Admin/Debug Section */}
+      <div className="mt-20 pt-6 border-t border-gray-200">
+        <div className="flex justify-center">
+          <button
+            onClick={() => {
+              // Clear quiz related data
+              localStorage.removeItem("quizState");
+              localStorage.removeItem("quizId");
+              localStorage.removeItem("quizSettings");
+
+              // Show confirmation
+              alert("Quiz data has been reset. You can start a new quiz now.");
+
+              // Refresh the page
+              window.location.reload();
+            }}
+            className="text-xs text-gray-500 hover:text-gray-700 underline"
+          >
+            Reset Quiz Data
+          </button>
+        </div>
+      </div>
     </main>
   );
 }

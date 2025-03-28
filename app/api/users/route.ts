@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const user = await userRepository.getByUuid(uuid);
+    const user = await userRepository.getById(uuid);
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });

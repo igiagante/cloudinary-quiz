@@ -328,18 +328,103 @@ D) trim=30:10
 
 ## Answers
 
-1. C - c_fit adjusts an image to fit within specific dimensions while maintaining aspect ratio.
+1. C - c_fit.
+
+**Explanation:** The `c_fit` crop mode resizes the image to fit within the specified dimensions while maintaining the original aspect ratio. Unlike `c_scale` which forces the exact dimensions, `c_fit` ensures the entire image is visible without distortion by fitting it within the specified width and height boundaries.
+
 2. A - Transformations are applied from left to right in the URL.
-3. A - This first crops a square from the center, then scales it to 300x300.
-4. A, B - q_auto and f_auto optimize quality and format automatically.
-5. A - Named transformations use t\_ prefix followed by the transformation name.
-6. A - This correctly uses the transformation array with separate objects for each step.
-7. B - This sets a base width while allowing DPR and quality to adjust automatically.
-8. A, B - Layer (l*) and color (co*) are required for text overlays.
-9. C - Using srcset with multiple Cloudinary URLs is most efficient for responsive images.
-10. A - This crops focusing on faces first, then applies the sepia effect.
-11. B - Named transformations should be used instead of repeating the same inline transformations.
-12. A, C, E - w_auto, dpr_auto and c_scale allow dynamic video resizing.
-13. D - This correctly implements the if condition for width and applies the watermark conditionally.
-14. A, B, D - Signed URLs with restrictions, allowed transformations configuration, and strict_transformations all help prevent unwanted transformations.
-15. A - start_offset and end_offset are used to extract portions of a video.
+
+**Explanation:** Cloudinary processes transformation chains in sequential order from left to right. Each transformation's output becomes the input for the next transformation in the chain. This allows for complex multi-step manipulations where the order of operations is critical to achieving the desired result.
+
+3. A -
+
+```
+c_crop,w_500,h_500,g_center/c_scale,w_300,h_300
+```
+
+**Explanation:** This transformation chain works in two sequential steps: first, it extracts a 500x500 square region from the center of the original image (`c_crop,w_500,h_500,g_center`), then it resizes that cropped square to 300x300 pixels (`c_scale,w_300,h_300`). The order is important because we're first cropping, then scaling the result.
+
+4. A - q_auto.
+   B - f_auto.
+
+**Explanation:** These two parameters work together to optimize delivery: `q_auto` automatically determines the optimal quality level based on image content and viewer's device, while `f_auto` automatically selects the most efficient format supported by the user's browser (WebP for Chrome, AVIF for supported browsers, JPEG/PNG for others). Together they significantly reduce file size while maintaining visual quality.
+
+5. A -
+
+```
+t_profile_thumbnail/bo_3px_solid_rgb:D5D5D5
+```
+
+**Explanation:** This is the correct syntax for applying a named transformation followed by additional transformations. Named transformations use the `t_` prefix followed by the transformation name. The transformations are applied in sequence, so the border is added after the named transformation is applied.
+
+6. A -
+
+```javascript
+cloudinary.url("sample.jpg", {
+  transformation: [
+    { effect: "sepia" },
+    { radius: 20 },
+    { border: "5px_solid_rgb:FF0000" },
+  ],
+});
+```
+
+**Explanation:** This code correctly uses the transformation array with separate objects for each transformation step. The transformations are applied in sequence: first the sepia effect, then rounding the corners (radius), and finally adding the red border. Separating each transformation into its own object in the array ensures they're applied in the correct order.
+
+7. B -
+
+```
+w_500,c_scale,dpr_auto,q_auto
+```
+
+**Explanation:** This combination sets a base width of 500 pixels while using `dpr_auto` to automatically deliver higher resolution versions to high-DPR devices like Retina displays. The `q_auto` parameter ensures optimal quality-to-filesize ratio for each device. Using a specific width rather than `w_auto` provides better cache efficiency while still supporting responsive delivery.
+
+8. A - `text`.
+
+**Explanation:** When adding text overlays, only the `text` parameter is absolutely required as it specifies the content to display. While other parameters like color, font, size, and positioning improve the appearance and placement, they have default values if not specified. The text parameter can be provided either directly or as a reference to a text style using the `text` parameter.
+
+9. C - Use the srcset attribute with multiple Cloudinary URLs.
+
+**Explanation:** Using the HTML `srcset` attribute with multiple Cloudinary URLs at different widths allows the browser to select the optimal version based on the device's characteristics. This approach provides precise control over which image dimensions are delivered to different device sizes without requiring JavaScript or compromising on performance.
+
+10. A -
+
+```
+c_crop,g_faces/e_sepia
+```
+
+**Explanation:** This transformation chain first crops the image to focus on detected faces (`c_crop,g_faces`) and then applies a sepia effect (`e_sepia`) to the cropped result. The order ensures that face detection is performed on the original image for best accuracy, and the effect is applied only to the relevant portion containing faces.
+
+11. B - Named transformations should be used instead of inline transformations.
+
+**Explanation:** The performance issue is that the same transformation chain is being repeated for each image in the gallery. Using a named transformation would allow the complex transformation to be defined once on the Cloudinary account and then simply referenced by name in each URL. This reduces URL length, improves cacheability, and makes the transformations easier to maintain.
+
+12. A - w_auto.
+    C - dpr_auto.
+    E - c_scale.
+
+**Explanation:** These parameters work together to enable responsive video delivery. `w_auto` allows the video width to adjust based on container size, `dpr_auto` delivers appropriate resolution for the viewer's device pixel ratio, and `c_scale` is the transformation type that handles proportional resizing. Together they ensure optimal video size for each viewer's device.
+
+13. D -
+
+```javascript
+cloudinary.url("sample.jpg", {
+  transformation: [
+    { if: "w_gt_1000" },
+    { overlay: "watermark", width: 200, gravity: "southeast" },
+    { if: "end" },
+  ],
+});
+```
+
+**Explanation:** This code correctly implements a conditional transformation using Cloudinary's if/end syntax. It checks if the image width is greater than 1000 pixels (`if: "w_gt_1000"`) and, if true, applies the watermark overlay to the southeast corner. The condition is properly closed with `if: "end"`. This approach applies transformations only when needed, saving bandwidth.
+
+14. A - Using signed URLs with transformation restriction.
+    B - Configuring allowed transformations in the account settings.
+    D - Using the strict_transformations flag.
+
+**Explanation:** These three methods prevent unwanted transformations: Signed URLs with transformation restrictions cryptographically ensure only approved transformations can be applied. Account settings can be configured to whitelist specific transformations. The strict_transformations flag restricts transformations to predefined, named transformations only. Together they provide layered security against transformation abuse.
+
+15. A - start_offset=30,end_offset=40.
+
+**Explanation:** To extract a specific portion of a video, `start_offset` specifies the starting point (30 seconds into the video) and `end_offset` defines the ending point (40 seconds into the video), resulting in a 10-second clip. These parameters allow precise trimming of video content without re-encoding the entire file.

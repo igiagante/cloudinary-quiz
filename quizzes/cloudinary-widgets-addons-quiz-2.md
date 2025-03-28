@@ -141,21 +141,65 @@ D) Integrate third-party libraries and services via webhooks
 
 ## Answers
 
-B) When deep integration with an existing content management system is required
-C) AI Tagging and Moderation
-B) Customize the widget's look and feel to match the application's branding
-C) Configure the widget to allow asset tagging, categorization, and searching
-B) Faster image downloads and rendering
-A) import { CloudinaryUploadWidget } from 'cloudinary-react';
-B) Cross-browser compatibility and adaptive bitrate streaming
-B) Use Cloudinary's responsive image breakpoints add-on to automate the process
-D) Dynamically generate responsive image URLs with specific width and height parameters
-B) To specify default upload options and access control permissions
-B) cloudinary.url('sample.jpg', { width: 800, crop: 'fit' })
-B) Easy rollback and comparison of asset changes over time
-B) Extract dominant colors from images to enable color-based searching
-C) Detect and identify objects, faces, and text within images
-C) To prevent unauthorized access to sensitive asset transformations
-A) const cloudinary = require('cloudinary').v2;
-C) Secure access control and token-based asset authorization
-A) Develop and deploy custom Functions-as-a-Service (FaaS) using Cloudinary Functions
+1. B - When deep integration with an existing content management system is required.
+
+**Explanation:** Custom UI integration is necessary when you need to tightly integrate with an existing CMS's workflows and interface. The standard Media Library widget might not provide enough flexibility for deep CMS integration.
+
+2. C - AI Tagging and Moderation.
+
+**Explanation:** This add-on uses artificial intelligence to automatically detect inappropriate content in user uploads. It can flag or reject content based on predefined moderation rules without manual review.
+
+3. B - Customize the widget's look and feel to match the application's branding.
+   C - Configure the widget to allow asset tagging, categorization, and searching.
+
+**Explanation:** These options extend the widget's functionality to provide core DAM features while maintaining visual consistency with your application. The branding customization ensures a seamless user experience, while tagging and categorization enable proper asset organization.
+
+4. B - Faster image downloads and rendering.
+
+**Explanation:** Cloudinary's image optimization add-ons significantly reduce file sizes without compromising quality. This results in faster page loads and improved user experience, especially on mobile networks.
+
+5. A - `import { CloudinaryUploadWidget } from 'cloudinary-react';`.
+
+**Explanation:** This is the correct import statement for the Cloudinary Upload Widget component in a React application. It provides a React-specific component that handles the upload functionality with proper React lifecycle integration.
+
+6. B - Cross-browser compatibility and adaptive bitrate streaming.
+
+**Explanation:** Cloudinary's video player ensures consistent playback across all browsers and devices. It automatically adjusts video quality based on the viewer's available bandwidth, providing smooth playback under varying network conditions.
+
+7. B - Use Cloudinary's responsive image breakpoints add-on to automate the process.
+   D - Dynamically generate responsive image URLs with specific width and height parameters.
+
+**Explanation:** These approaches ensure optimal image delivery for different device sizes. The responsive breakpoints add-on automatically determines the best sizes for different devices, while dynamic URL generation allows real-time adaptation to specific viewport dimensions.
+
+8. B - To specify default upload options and access control permissions.
+
+**Explanation:** Upload presets define a set of predefined upload parameters that can be reused across different upload instances. They simplify integration and ensure consistent upload settings, including security and access controls.
+
+9. B - `cloudinary.url('sample.jpg', { width: 800, crop: 'fit' })`.
+
+**Explanation:** This code correctly generates a URL that resizes the image to 800 pixels wide while maintaining its original aspect ratio. The 'fit' crop mode ensures the image is not stretched or distorted.
+
+10. B - Easy rollback and comparison of asset changes over time.
+
+**Explanation:** Cloudinary's versioning system maintains a history of each asset, allowing you to compare changes and revert to previous versions if needed. This is valuable for content management workflows where assets may evolve over time.
+
+11. B - Extract dominant colors from images to enable color-based searching.
+    C - Detect and identify objects, faces, and text within images.
+
+**Explanation:** These AI capabilities enhance search functionality by automatically analyzing image content. Color extraction enables finding images by their color palette, while object and text detection allows searching for specific content within images without manual tagging.
+
+12. C - To prevent unauthorized access to sensitive asset transformations.
+
+**Explanation:** Strict transformations is a security feature that controls which transformation parameters can be used with your assets. It prevents potentially dangerous or costly operations from being performed without proper authorization.
+
+13. A - `const cloudinary = require('cloudinary').v2;`.
+
+**Explanation:** This is the correct way to import Cloudinary's Node.js SDK in a server-side application. It provides access to all server-side functionality, including secure upload and admin operations.
+
+14. C - Secure access control and token-based asset authorization.
+
+**Explanation:** Media authentication provides secure, temporary access to protected assets through token-based authorization. This ensures that only authorized users can access sensitive media assets for a limited time period.
+
+15. A - Develop and deploy custom Functions-as-a-Service (FaaS) using Cloudinary Functions.
+
+**Explanation:** Cloudinary Functions allows you to create custom transformation and processing logic beyond the built-in capabilities. This serverless approach gives you flexibility to extend Cloudinary's functionality without managing your own infrastructure.
