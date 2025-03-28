@@ -19,6 +19,8 @@ import { NextRequest } from "next/server";
 import {
   distributeQuestionsByTopic,
   parseTopics,
+  parseTopicsMetadata,
+  distributeQuestionsByWeight,
 } from "./db/parser/topic-parser";
 
 // Progress tracking
@@ -397,6 +399,9 @@ function createTopicDistribution(
   const safeTopics = [...topics];
   const distribution: Record<string, number> = {};
 
+  // Log the topics we're distributing
+  console.log("Creating distribution for topics:", safeTopics);
+
   // Initialize with at least one question per topic if possible
   const questionsPerTopic = Math.max(
     1,
@@ -410,6 +415,8 @@ function createTopicDistribution(
       console.warn(`Skipping invalid topic: ${topic}`);
     }
   });
+
+  console.log("Initial distribution:", distribution);
 
   // Distribute any remaining questions
   let remainingQuestions =
@@ -742,19 +749,29 @@ export async function generateQuizFast(
     const questionsToGenerate = Math.max(1, Math.min(30, numQuestions || 10));
     reportProgress(`Will generate ${questionsToGenerate} questions`);
 
-    // 1. Select topics if none provided
-    const selectedTopics =
-      topics && Array.isArray(topics) && topics.length > 0
-        ? topics
-        : shuffleArray(cloudinaryTopicList).slice(
-            0,
-            Math.min(questionsToGenerate, 5)
-          );
+    // 1. Select topics with proper parsing - convert to string array
+    const topicsAsStrings =
+      topics && Array.isArray(topics)
+        ? topics.map((t) => String(t)) // Ensure all topics are strings
+        : [];
 
+    // Use parseTopics to ensure consistent handling
+    const selectedTopics = parseTopics(topicsAsStrings);
+
+    // Validate we have topics to work with
+    if (selectedTopics.length === 0) {
+      throw new Error("No topics provided for quiz generation");
+    }
+
+    // Log the exact topic strings being used
     reportProgress(`Selected topics: ${selectedTopics.join(", ")}`);
+    console.log(
+      "Topic strings for database query:",
+      JSON.stringify(selectedTopics)
+    );
 
-    // 2. Create topic distribution
-    const topicDistribution = createTopicDistribution(
+    // 2. Create topic distribution using the improved function
+    const topicDistribution = distributeQuestionsByTopic(
       selectedTopics,
       questionsToGenerate
     );
@@ -777,6 +794,10 @@ export async function generateQuizFast(
           difficulty,
           count * 2,
           "active" // Only get active questions
+        );
+
+        console.log(
+          `Raw DB query for topic "${topic}" returned ${dbQuestions.length} questions`
         );
 
         reportProgress(
@@ -1118,8 +1139,8 @@ function selectQuestions(
   count: number
 ): QuizQuestion[] {
   // Get topic distribution
-  const distribution = distributeQuestionsByTopic(count);
-  const topics = parseTopics();
+  const distribution = distributeQuestionsByWeight(count);
+  const topics = parseTopicsMetadata();
   const selectedQuestions: QuizQuestion[] = [];
 
   // Keep track of how many questions we've selected per topic

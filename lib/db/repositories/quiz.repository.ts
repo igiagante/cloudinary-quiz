@@ -14,13 +14,12 @@ import {
   questions,
   options,
 } from "../schema";
-import { v4 as uuidv4 } from "uuid";
+import { nanoid } from "nanoid";
 import { QuestionWithOptions } from "./question.repository";
 
 // Define proper interfaces for the query results
 interface QuizResult {
-  id: number;
-  uuid: string;
+  id: string;
   userId: string | null;
   numQuestions: number;
   isCompleted: boolean;
@@ -32,12 +31,11 @@ interface QuizResult {
 
 interface QuizQuestionResult {
   questionId: string;
-  quizId: number;
+  quizId: string;
   userAnswer: number | null;
   isCorrect: boolean | null;
   question: {
     id: string;
-    uuid: string;
     question: string;
     explanation: string;
     topic: string;
@@ -61,8 +59,7 @@ interface TopicPerformanceResult {
 }
 
 export type QuizWithQuestions = {
-  id: number;
-  uuid: string;
+  id: string;
   userId?: string;
   numQuestions: number;
   isCompleted: boolean;
@@ -71,7 +68,7 @@ export type QuizWithQuestions = {
   createdAt: Date;
   completedAt?: Date;
   questions: Array<{
-    questionId: number;
+    questionId: string;
     question: QuestionWithOptions;
     userAnswer?: number;
     isCorrect?: boolean;
@@ -115,13 +112,13 @@ export const quizRepository = {
    * Create a new quiz with selected questions
    */
   async create(input: NewQuizInput): Promise<QuizWithQuestions> {
-    const quizUuid = uuidv4();
+    const quizId = nanoid();
     const now = new Date();
 
     const [quiz] = await db
       .insert(quizzes)
       .values({
-        uuid: quizUuid,
+        id: quizId,
         userId: input.userId || null,
         createdAt: now,
         numQuestions: input.numQuestions,
@@ -139,7 +136,6 @@ export const quizRepository = {
 
     return {
       id: quiz.id,
-      uuid: quiz.uuid,
       userId: quiz.userId || undefined,
       numQuestions: quiz.numQuestions,
       isCompleted: quiz.isCompleted,
@@ -153,18 +149,21 @@ export const quizRepository = {
   },
 
   /**
-   * Get a quiz by UUID with all its questions and answers
+   * Get a quiz by ID
    */
-  async getByUuid(uuid: string): Promise<QuizWithQuestions | null> {
+  async getById(id: string): Promise<QuizWithQuestions | null> {
     // Cast db.query to access the tables while preserving type safety
     const dbQuery = db.query as unknown as {
       quizzes: { findFirst: (opts: any) => Promise<QuizResult | undefined> };
       quizQuestions: { findMany: (opts: any) => Promise<QuizQuestionResult[]> };
       options: { findMany: (opts: any) => Promise<OptionResult[]> };
+      topicPerformance: {
+        findMany: (opts: any) => Promise<TopicPerformanceResult[]>;
+      };
     };
 
     const quizResult = await dbQuery.quizzes.findFirst({
-      where: eq(quizzes.uuid, uuid),
+      where: eq(quizzes.id, id),
     });
 
     if (!quizResult) {
@@ -188,6 +187,11 @@ export const quizRepository = {
           : undefined,
     });
 
+    // Fetch topic performance data for this quiz
+    const topicPerformanceData = await dbQuery.topicPerformance.findMany({
+      where: eq(topicPerformance.quizId, quizResult.id),
+    });
+
     const questionsWithOptions = quizQuestionsList.map(
       (qq: QuizQuestionResult) => {
         const questionOptions = allOptions.filter(
@@ -198,7 +202,6 @@ export const quizRepository = {
           questionId: qq.questionId,
           question: {
             id: qq.question.id,
-            uuid: qq.question.uuid,
             question: qq.question.question,
             explanation: qq.question.explanation,
             topic: qq.question.topic,
@@ -218,7 +221,6 @@ export const quizRepository = {
 
     return {
       id: quizResult.id,
-      uuid: quizResult.uuid,
       userId: quizResult.userId || undefined,
       numQuestions: quizResult.numQuestions,
       isCompleted: quizResult.isCompleted,
@@ -227,7 +229,7 @@ export const quizRepository = {
       createdAt: quizResult.createdAt,
       completedAt: quizResult.completedAt || undefined,
       questions: questionsWithOptions,
-      topicPerformance: [],
+      topicPerformance: topicPerformanceData || [],
     };
   },
 
@@ -237,7 +239,7 @@ export const quizRepository = {
   async answerQuestion(input: QuizAnswerInput): Promise<boolean> {
     return await db.transaction(async (tx) => {
       const quiz = await (tx.query as any).quizzes.findFirst({
-        where: eq(quizzes.uuid, input.quizId),
+        where: eq(quizzes.id, input.quizId),
       });
 
       if (!quiz || quiz.isCompleted) {
@@ -274,7 +276,7 @@ export const quizRepository = {
    * Complete a quiz and calculate results
    */
   async completeQuiz(
-    quizId: number,
+    quizId: string,
     score: number,
     topicPerformanceData: Array<{
       topic: string;
@@ -283,7 +285,25 @@ export const quizRepository = {
       percentage: number;
     }>
   ): Promise<void> {
+    console.log(`\n===== COMPLETING QUIZ ${quizId} WITH SCORE ${score} =====`);
+    console.log(
+      `Topic performance data received: ${topicPerformanceData.length} topics`
+    );
+
+    console.log("Raw topic data:");
+    topicPerformanceData.forEach((tp, index) => {
+      console.log(
+        `[${index + 1}] Topic: "${
+          tp.topic
+        }", Type: ${typeof tp.topic}, Score: ${tp.correct}/${tp.total} (${
+          tp.percentage
+        }%)`
+      );
+    });
+
     await db.transaction(async (tx) => {
+      console.log(`Updating quiz ${quizId} as completed with score ${score}`);
+
       await tx
         .update(quizzes)
         .set({
@@ -293,16 +313,65 @@ export const quizRepository = {
         })
         .where(eq(quizzes.id, quizId));
 
+      console.log(`\n===== SAVING INDIVIDUAL TOPIC PERFORMANCE RECORDS =====`);
+      let successCount = 0;
+      let errorCount = 0;
+
       for (const tp of topicPerformanceData) {
-        await tx.insert(topicPerformance).values({
-          quizId,
-          topic: tp.topic as any,
-          correct: tp.correct,
-          total: tp.total,
-          percentage: tp.percentage,
-          createdAt: new Date(),
-        });
+        console.log(
+          `Saving topic performance: "${tp.topic}", Score: ${tp.correct}/${tp.total} (${tp.percentage}%)`
+        );
+
+        try {
+          // Check if the topic is a valid enum value
+          const validTopics = [
+            "Products",
+            "Architecture",
+            "Lifecycle",
+            "Widgets",
+            "Assets",
+            "Transformations",
+            "Management",
+            "Access",
+          ];
+
+          if (!validTopics.includes(tp.topic)) {
+            console.error(
+              `ERROR: "${
+                tp.topic
+              }" is not in the list of valid topics: ${validTopics.join(", ")}`
+            );
+          }
+
+          await tx.insert(topicPerformance).values({
+            quizId,
+            topic: tp.topic as any, // The topic should already be properly mapped at this point
+            correct: tp.correct,
+            total: tp.total,
+            percentage: tp.percentage,
+            createdAt: new Date(),
+          });
+          console.log(
+            `✅ Successfully saved topic performance for "${tp.topic}"`
+          );
+          successCount++;
+        } catch (error) {
+          console.error(
+            `❌ Failed to save topic performance for "${tp.topic}":`,
+            error
+          );
+          errorCount++;
+          // Continue with other topics even if one fails
+        }
       }
+
+      console.log(`
+===== TOPIC PERFORMANCE SUMMARY =====
+Successfully saved: ${successCount}/${topicPerformanceData.length} topics
+Errors: ${errorCount}/${topicPerformanceData.length} topics
+Quiz ${quizId} completed with score ${score}
+=====================================
+      `);
     });
   },
 
@@ -314,7 +383,7 @@ export const quizRepository = {
     limit: number = 10
   ): Promise<
     Array<{
-      uuid: string;
+      id: string;
       createdAt: Date;
       completedAt?: Date;
       score?: number;
@@ -328,7 +397,7 @@ export const quizRepository = {
     });
 
     return quizzesData.map((quiz: any) => ({
-      uuid: quiz.uuid,
+      id: quiz.id,
       createdAt: quiz.createdAt,
       completedAt: quiz.completedAt || undefined,
       score: quiz.score || undefined,
@@ -392,103 +461,102 @@ export const quizRepository = {
     };
   },
 
-  /**
-   * Get a quiz by ID with all its questions and answers
-   */
-  async getById(id: number): Promise<QuizWithQuestions | null> {
-    // Cast db.query to access the tables while preserving type safety
-    const dbQuery = db.query as unknown as {
-      quizzes: { findFirst: (opts: any) => Promise<QuizResult | undefined> };
-      quizQuestions: { findMany: (opts: any) => Promise<QuizQuestionResult[]> };
-      options: { findMany: (opts: any) => Promise<OptionResult[]> };
-    };
-
-    const quizResult = await dbQuery.quizzes.findFirst({
-      where: eq(quizzes.id, id),
-    });
-
-    if (!quizResult) {
-      return null;
-    }
-
-    const quizQuestionsList = await dbQuery.quizQuestions.findMany({
-      where: eq(quizQuestions.quizId, id),
-      with: {
-        question: true,
-      },
-    });
-
-    const questionIds = quizQuestionsList.map(
-      (qq: QuizQuestionResult) => qq.questionId
-    );
-    const allOptions = await dbQuery.options.findMany({
-      where:
-        questionIds.length > 0
-          ? inArray(options.questionId, questionIds)
-          : undefined,
-    });
-
-    const questionsWithOptions = quizQuestionsList.map(
-      (qq: QuizQuestionResult) => {
-        const questionOptions = allOptions.filter(
-          (opt: OptionResult) => opt.questionId === qq.questionId
-        );
-
-        return {
-          questionId: qq.questionId,
-          question: {
-            id: qq.question.id,
-            uuid: qq.question.uuid,
-            question: qq.question.question,
-            explanation: qq.question.explanation,
-            topic: qq.question.topic,
-            difficulty: qq.question.difficulty,
-            source: qq.question.source,
-            options: questionOptions.map((o: OptionResult) => ({
-              id: o.id,
-              text: o.text,
-              isCorrect: o.isCorrect,
-            })),
-          },
-          userAnswer: qq.userAnswer || undefined,
-          isCorrect: qq.isCorrect || undefined,
-        };
+  async updateQuizAnswer(
+    quizId: string,
+    questionId: string,
+    userAnswer: number | null,
+    isCorrect: boolean
+  ): Promise<void> {
+    console.log(
+      `Saving answer for quiz ${quizId}, question ID ${questionId}:`,
+      {
+        userAnswer: userAnswer === null ? "NULL" : userAnswer,
+        isCorrect,
       }
     );
 
-    return {
-      id: quizResult.id,
-      uuid: quizResult.uuid,
-      userId: quizResult.userId || undefined,
-      numQuestions: quizResult.numQuestions,
-      isCompleted: quizResult.isCompleted,
-      score: quizResult.score || undefined,
-      passPercentage: quizResult.passPercentage,
-      createdAt: quizResult.createdAt,
-      completedAt: quizResult.completedAt || undefined,
-      questions: questionsWithOptions,
-      topicPerformance: [],
-    };
-  },
+    try {
+      // First, find the quiz_question record using the question's ID
+      // We need to get the question's internal ID from the database
+      const questionRecords = await db.query.questions.findMany({
+        where: eq(questions.id, questionId),
+        columns: {
+          id: true,
+        },
+      });
 
-  async updateQuizAnswer(
-    quizId: number,
-    questionId: string,
-    userAnswer: number,
-    isCorrect: boolean
-  ): Promise<void> {
-    await db
-      .update(quizQuestions)
-      .set({
-        userAnswer,
-        isCorrect,
-      })
-      .where(
-        and(
-          eq(quizQuestions.quizId, quizId),
-          eq(quizQuestions.questionId, questionId)
-        )
+      if (!questionRecords || questionRecords.length === 0) {
+        console.error(`Could not find question with ID ${questionId}`);
+        throw new Error(`Question with ID ${questionId} not found`);
+      }
+
+      const questionInternalId = questionRecords[0].id;
+      console.log(
+        `Found question ID ${questionInternalId} for ID ${questionId}`
       );
+
+      // Safely convert user answer to number or null
+      let finalUserAnswer: number | null = null;
+
+      if (userAnswer !== null) {
+        try {
+          if (typeof userAnswer === "number") {
+            finalUserAnswer = userAnswer;
+          } else {
+            const parsed = Number(userAnswer);
+            if (!isNaN(parsed) && parsed > 0) {
+              finalUserAnswer = parsed;
+            } else {
+              console.warn(
+                `Invalid user answer format: ${userAnswer}, storing as NULL`
+              );
+              finalUserAnswer = null;
+            }
+          }
+        } catch (e) {
+          console.warn(
+            `Error converting user answer to number: ${userAnswer}`,
+            e
+          );
+        }
+      }
+
+      console.log(
+        `Final answer value to save: ${
+          finalUserAnswer === null ? "NULL" : finalUserAnswer
+        }`
+      );
+
+      // Now update the quiz_questions record using the internal question ID
+      const result = await db
+        .update(quizQuestions)
+        .set({
+          userAnswer: finalUserAnswer,
+          isCorrect,
+        })
+        .where(
+          and(
+            eq(quizQuestions.quizId, quizId),
+            eq(quizQuestions.questionId, questionInternalId)
+          )
+        )
+        .returning();
+
+      console.log(`Update result: ${result.length} rows affected`);
+
+      if (result.length === 0) {
+        console.warn(
+          `No quiz_questions record found for quiz ${quizId} and question ${questionId}`
+        );
+      } else {
+        console.log(
+          `Successfully saved answer for question ${questionId}, isCorrect: ${isCorrect}`
+        );
+      }
+    } catch (error) {
+      console.error(`Error saving answer for question ${questionId}:`, error);
+      throw error;
+    }
   },
 
   async getTopicPerformance(userId: string): Promise<
@@ -551,7 +619,7 @@ export const quizRepository = {
     topic: string
   ): Promise<
     Array<{
-      uuid: string;
+      id: string;
       createdAt: Date;
       completedAt?: Date;
       score?: number;
@@ -588,7 +656,7 @@ export const quizRepository = {
     });
 
     return quizResults.map((quiz) => ({
-      uuid: quiz.uuid,
+      id: quiz.id,
       createdAt: quiz.createdAt,
       completedAt: quiz.completedAt || undefined,
       score: quiz.score || undefined,
@@ -602,7 +670,7 @@ export const quizRepository = {
     difficulty: string
   ): Promise<
     Array<{
-      uuid: string;
+      id: string;
       createdAt: Date;
       completedAt?: Date;
       score?: number;
@@ -639,7 +707,7 @@ export const quizRepository = {
     });
 
     return quizResults.map((quiz) => ({
-      uuid: quiz.uuid,
+      id: quiz.id,
       createdAt: quiz.createdAt,
       completedAt: quiz.completedAt || undefined,
       score: quiz.score || undefined,

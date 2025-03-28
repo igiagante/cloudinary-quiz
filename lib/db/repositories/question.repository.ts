@@ -122,7 +122,7 @@ export const questionRepository = {
    */
   async getByUuid(uuid: string): Promise<QuestionWithOptions | null> {
     const result = await db.query.questions.findFirst({
-      where: eq(questions.uuid, uuid),
+      where: eq(questions.id, uuid),
       with: {
         options: true,
       },
@@ -157,10 +157,8 @@ export const questionRepository = {
     limit?: number,
     status: string = "active"
   ): Promise<QuestionWithOptions[]> {
-    // Map input topics to valid schema topics
-    const validTopics = topics
-      .filter((t) => Object.values(Topics).includes(t as TopicType))
-      .map((t) => t as TopicType);
+    // No need to validate topics against enum since we store full topic names
+    const validTopics = topics;
 
     // Map difficulty
     const validDifficulty =
@@ -169,10 +167,12 @@ export const questionRepository = {
         ? (difficulty as DifficultyType)
         : undefined;
 
+    console.log("Fetching questions with topics:", validTopics);
+
     const query = db.query.questions.findMany({
       where: and(
         validTopics.length > 0
-          ? inArray(questions.topic, validTopics as unknown as string[])
+          ? inArray(questions.topic, validTopics)
           : undefined,
         validDifficulty
           ? eq(questions.difficulty, validDifficulty as string)
@@ -187,6 +187,8 @@ export const questionRepository = {
     });
 
     const result = await query;
+
+    console.log(`Found ${result.length} questions matching criteria`);
 
     return result.map((q: any) => ({
       id: q.id,
@@ -300,7 +302,7 @@ export const questionRepository = {
     const result = await db.transaction(async (tx) => {
       // Get the question first
       const existingQuestion = await tx.query.questions.findFirst({
-        where: eq(questions.uuid, uuid),
+        where: eq(questions.id, uuid),
       });
 
       if (!existingQuestion) {
@@ -329,7 +331,7 @@ export const questionRepository = {
           difficulty: validDifficulty,
           updatedAt: new Date(),
         })
-        .where(eq(questions.uuid, uuid))
+        .where(eq(questions.id, uuid))
         .returning();
 
       // Delete existing options
@@ -376,7 +378,7 @@ export const questionRepository = {
   async delete(uuid: string): Promise<boolean> {
     const result = await db
       .delete(questions)
-      .where(eq(questions.uuid, uuid))
+      .where(eq(questions.id, uuid))
       .returning();
 
     return result.length > 0;
@@ -522,7 +524,7 @@ export const questionRepository = {
         deletedAt: now,
         updatedAt: now,
       })
-      .where(eq(questions.uuid, uuid))
+      .where(eq(questions.id, uuid))
       .returning();
 
     return result.length > 0;
@@ -539,7 +541,7 @@ export const questionRepository = {
         deletedAt: null,
         updatedAt: new Date(),
       })
-      .where(eq(questions.uuid, uuid))
+      .where(eq(questions.id, uuid))
       .returning();
 
     return result.length > 0;
@@ -567,7 +569,7 @@ export const questionRepository = {
     const result = await db
       .update(questions)
       .set(updates)
-      .where(eq(questions.uuid, uuid))
+      .where(eq(questions.id, uuid))
       .returning();
 
     return result.length > 0;
@@ -640,5 +642,42 @@ export const questionRepository = {
         isCorrect: o.isCorrect,
       })),
     }));
+  },
+
+  /**
+   * Find a question by ID or UUID
+   */
+  async findByIdOrUuid(id: string): Promise<QuestionWithOptions | null> {
+    try {
+      // Try both direct query approaches
+      let question = await db.query.questions.findFirst({
+        where: eq(questions.id, id),
+      });
+
+      if (!question) {
+        console.log(
+          `Question not found with ID: ${id}. Checking all questions...`
+        );
+
+        // Let's see if we can get any questions at all
+        const anyQuestions = await db.query.questions.findMany({ limit: 1 });
+        if (anyQuestions.length === 0) {
+          console.log("No questions found in database at all!");
+        } else {
+          console.log(`Found a question with ID: ${anyQuestions[0].id}`);
+        }
+      }
+
+      return question;
+    } catch (error) {
+      console.error(`Error finding question with ID ${id}:`, error);
+      return null;
+    }
+  },
+
+  getQuestion: async function (id: string) {
+    return await db.query.questions.findFirst({
+      where: eq(questions.id, id),
+    });
   },
 };

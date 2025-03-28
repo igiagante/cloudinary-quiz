@@ -8,26 +8,39 @@ export async function POST(
 ) {
   try {
     const { quizId } = await params;
-    const body = await request.json();
-    const { score, topicPerformance } = body;
+    const quiz = await quizRepository.getById(quizId);
 
-    // Get quiz by UUID to get its numeric ID
-    const quiz = await quizRepository.getByUuid(quizId);
     if (!quiz) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
     }
 
-    // Complete the quiz and calculate results
-    await quizRepository.completeQuiz(quiz.id, score, topicPerformance);
+    if (quiz.isCompleted) {
+      return NextResponse.json(
+        { error: "Quiz already completed" },
+        { status: 400 }
+      );
+    }
 
-    return NextResponse.json({ success: true });
+    // Calculate score
+    const totalQuestions = quiz.questions.length;
+    const correctAnswers = quiz.questions.filter((q) => q.isCorrect).length;
+    const scorePercentage = Math.round((correctAnswers / totalQuestions) * 100);
+
+    // Complete the quiz
+    await quizRepository.completeQuiz(quiz.id, scorePercentage, []);
+
+    return NextResponse.json({
+      quizId: quiz.id,
+      totalQuestions,
+      correctAnswers,
+      score: scorePercentage,
+      passed: scorePercentage >= quiz.passPercentage,
+      topicPerformance: [], // Empty array for now since we don't have the data
+    });
   } catch (error) {
     console.error("Error completing quiz:", error);
     return NextResponse.json(
-      {
-        error:
-          error instanceof Error ? error.message : "Failed to complete quiz",
-      },
+      { error: "Failed to complete quiz" },
       { status: 500 }
     );
   }

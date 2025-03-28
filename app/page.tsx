@@ -27,6 +27,32 @@ export default function Home() {
   const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
+    // Check if we need to clear an unfinished quiz
+    const quizState = localStorage.getItem("quizState");
+    if (quizState) {
+      try {
+        const parsedState = JSON.parse(quizState);
+        // If quiz is not complete, offer to clear it
+        if (
+          !parsedState.isComplete &&
+          parsedState.questions &&
+          parsedState.questions.length > 0
+        ) {
+          // Auto-clear unfinished quizzes to prevent state issues
+          localStorage.removeItem("quizState");
+          console.log("Cleared unfinished quiz state on home page load");
+
+          // No need to remove quizId as it will be reused
+        }
+      } catch (e) {
+        // If there's any error parsing, clear it
+        localStorage.removeItem("quizState");
+        console.error("Error parsing quiz state, cleared it:", e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     const fetchStats = async () => {
       try {
         const response = await fetch("/api/stats");
@@ -58,6 +84,13 @@ export default function Home() {
 
   const handleStartQuiz = async () => {
     if (isGenerating) return;
+
+    // Validate topic selection
+    if (selectedTopics.length === 0) {
+      setError("Please select at least one topic before starting the quiz");
+      return;
+    }
+
     setIsGenerating(true);
     setError(null);
 
@@ -71,12 +104,9 @@ export default function Home() {
     };
 
     try {
-      // Create anonymous user if none exists
-      if (!localStorage.getItem("userId")) {
-        updateProgress("Creating anonymous user profile...");
-        const userId = uuidv4();
-        localStorage.setItem("userId", userId);
-      }
+      // Replace with your actual user ID from the database
+      const existingUserId = "aba9c6b9-6ee2-4e5a-a0ce-0e069907407c";
+      localStorage.setItem("userId", existingUserId);
 
       // Save quiz settings to localStorage
       updateProgress("Saving quiz settings...");
@@ -105,7 +135,7 @@ export default function Home() {
       // Create a clean, properly typed request body
       const requestBody = {
         numQuestions: Number(numQuestions),
-        topics: selectedTopics.length > 0 ? selectedTopics : undefined,
+        topics: selectedTopics, // Always send selected topics, no undefined fallback
         difficulty: difficulty === "mixed" ? undefined : difficulty,
         model,
         maxNewQuestions,
@@ -162,20 +192,34 @@ export default function Home() {
         console.error("Question missing options:", questions[0]);
       }
 
+      // After the first question structure console log, add this:
+      console.log(
+        "Question IDs being sent to create quiz:",
+        JSON.stringify(
+          questions.map((q: { id: string }) => q.id),
+          null,
+          2
+        )
+      );
+
+      console.log(
+        "Question IDs format from API:",
+        questions.map((q: { id: string }) => q.id)
+      );
+
       updateProgress("Quiz generation successful! Preparing your quiz...");
 
       // Create a quiz in the database
       updateProgress("Creating quiz in database...");
-      const userId = localStorage.getItem("userId");
       const createQuizResponse = await fetch("/api/quizzes", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          userId,
+          userId: existingUserId,
           numQuestions: questions.length,
-          questionIds: questions.map((q: any) => q.id),
+          questionIds: questions.map((q: { id: string }) => q.id),
         }),
       });
 
@@ -188,7 +232,12 @@ export default function Home() {
       } else {
         const quizData = await createQuizResponse.json();
         // Save the quiz ID to localStorage
-        localStorage.setItem("quizId", quizData.quizId);
+        localStorage.setItem(
+          "quizId",
+          typeof quizData.quizId === "object"
+            ? quizData.quizId.uuid || String(quizData.quizId)
+            : String(quizData.quizId)
+        );
         updateProgress("Quiz saved to database successfully!");
       }
 
@@ -345,7 +394,7 @@ export default function Home() {
           </div>
           <div className="mt-2 text-sm text-gray-500">
             {selectedTopics.length === 0
-              ? "No topics selected (all topics will be used)"
+              ? "Please select at least one topic"
               : `${selectedTopics.length} topics selected`}
           </div>
         </div>
@@ -510,6 +559,29 @@ export default function Home() {
       </div>
 
       <AdminLink />
+
+      {/* Admin/Debug Section */}
+      <div className="mt-20 pt-6 border-t border-gray-200">
+        <div className="flex justify-center">
+          <button
+            onClick={() => {
+              // Clear quiz related data
+              localStorage.removeItem("quizState");
+              localStorage.removeItem("quizId");
+              localStorage.removeItem("quizSettings");
+
+              // Show confirmation
+              alert("Quiz data has been reset. You can start a new quiz now.");
+
+              // Refresh the page
+              window.location.reload();
+            }}
+            className="text-xs text-gray-500 hover:text-gray-700 underline"
+          >
+            Reset Quiz Data
+          </button>
+        </div>
+      </div>
     </main>
   );
 }

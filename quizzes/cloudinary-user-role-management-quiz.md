@@ -243,18 +243,95 @@ E) Manual permission management
 
 ## Answers
 
-1. B - Granular, role-based access controls provide the most secure approach to user management.
-2. A - The `cloudinary.provisioning.account.sub_accounts()` method is the correct way to create a sub-account with specific configurations.
-3. A, B, D - Role-based access control, custom user groups, and granular permission sets provide maximum flexibility.
-4. A - The `cloudinary.admin.update_user()` method allows comprehensive user permission and role management.
-5. A, B, D - Multi-factor authentication, role-based access controls, and dynamic access tokens ensure comprehensive security.
-6. B - `cloudinary.provisioning.users()` provides the most straightforward method to list users in a Cloudinary account.
-7. B - Dynamic role-based access with automated policy enforcement is most effective in dynamic environments.
-8. A, B, D - Hierarchical user roles, custom permission sets, and context-specific access policies provide granular control.
-9. B - Short-lived, signed authentication tokens provide the most secure API integration method.
-10. A, B, D - Centralized user management, standardized role templates, and dynamic access policies ensure consistent controls.
-11. B - Multi-layered authentication with continuous verification provides the most robust access protection.
-12. B - Context-aware, role-based access controls ensure optimal access management for diverse user types.
-13. A, B, D - OAuth 2.0, JWT, and short-lived access tokens offer the most secure authentication methods.
-14. B - Dynamic, context-aware access restrictions prevent unauthorized asset access most effectively.
-15. A, B, C - Zero-trust security models, AI-powered access monitoring, and blockchain-based authentication will transform user management.
+1. B - Implementing granular, role-based access controls.
+
+**Explanation:** Role-based access controls (RBAC) with granular permissions provide the most secure approach for multi-tenant platforms. This method defines precise access boundaries between tenants, assigns specific capabilities based on user functions, and can adapt to complex organizational structures while maintaining strong security isolation.
+
+2. A -
+
+```javascript
+cloudinary.provisioning.account
+  .sub_accounts(true, null, "marketing")
+  .then((response) => {
+    console.log(response);
+  });
+```
+
+**Explanation:** This is the correct method for creating sub-accounts using Cloudinary's Provisioning API. The method takes parameters for enabled status, parent account ID (null uses the current account), and the sub-account name. This API specifically handles account provisioning operations, unlike the other options which are either incorrect method names or don't exist in the API.
+
+3. A - Implementing role-based access control (RBAC).
+   B - Creating custom user groups.
+   D - Developing granular permission sets.
+
+**Explanation:** These three approaches work together to provide maximum flexibility for complex global organizations. RBAC creates a structured framework for permissions based on job functions, custom user groups allow for organizational-specific classifications, and granular permission sets enable fine-tuned access controls that can adapt to specific regional or departmental requirements.
+
+4. A -
+
+```javascript
+cloudinary.admin.update_user("user_id", {
+  roles: ["editor"],
+  permissions: ["upload", "edit"],
+});
+```
+
+**Explanation:** This code correctly uses the Admin API to update user permissions. It specifies both roles (higher-level groupings of permissions) and individual permissions, providing precise control over user capabilities. The method takes a user ID and a configuration object with the desired permission settings.
+
+5. A - Implementing multi-factor authentication.
+   B - Using role-based access controls.
+   D - Creating dynamic access tokens.
+
+**Explanation:** These three approaches create a comprehensive security system for sensitive assets. Multi-factor authentication verifies user identity beyond just passwords, role-based access controls ensure users only have access to appropriate assets, and dynamic access tokens provide time-limited, revocable access that prevents permanent credential exposure.
+
+6. B -
+
+```javascript
+cloudinary.provisioning.users().then((users) => {
+  console.log(users);
+});
+```
+
+**Explanation:** This code correctly uses the Provisioning API to list users in a Cloudinary account. The `provisioning.users()` method returns all users in the current account context, which can be filtered as needed. It returns a promise that resolves with the user list, matching Cloudinary's modern API patterns.
+
+7. B - Dynamic role-based access with automated policy enforcement.
+
+**Explanation:** In dynamic enterprise environments where organizational structures and projects change frequently, dynamic role-based access with automated policy enforcement provides the most effective management strategy. This approach automatically adjusts permissions based on user attributes, group memberships, and context, ensuring access remains appropriate even as the organization evolves.
+
+8. A - Implementing hierarchical user roles.
+   B - Creating custom permission sets.
+   D - Developing context-specific access policies.
+
+**Explanation:** For collaborative platforms, these approaches provide truly granular control. Hierarchical roles create a structured permission framework, custom permission sets allow platform-specific capabilities to be defined, and context-specific policies enable access to change based on factors like project status, content sensitivity, or collaboration stage.
+
+9. B - Using short-lived, signed authentication tokens.
+
+**Explanation:** Short-lived, signed tokens provide the most secure API authentication because they're temporary, cryptographically verified, and can't be reused after expiration. Unlike static API keys that remain valid indefinitely if compromised, these tokens limit the potential damage window and can include specific scopes limiting what actions they authorize.
+
+10. A - Implementing centralized user management.
+    B - Creating standardized role templates.
+    D - Developing dynamic access policies.
+
+**Explanation:** These approaches ensure consistent access controls across teams. Centralized management provides a single source of truth for user information, standardized role templates create consistent permission sets that can be applied uniformly, and dynamic policies automatically adjust access based on established rules without requiring manual intervention for each team.
+
+11. B - Multi-layered authentication with continuous verification.
+
+**Explanation:** This approach provides the most robust protection by implementing security at multiple levels and continuously validating access rights. Rather than a one-time check at login, it verifies user legitimacy throughout the session based on behavior patterns, device characteristics, and access patterns, detecting and blocking unauthorized access attempts even after initial authentication.
+
+12. B - Implementing context-aware, role-based access controls.
+
+**Explanation:** For marketplaces with diverse user types (buyers, sellers, creators, administrators), context-aware RBAC provides optimal management by adjusting permissions based on user roles and the specific context of their actions. This allows the same user to have different capabilities in different scenarios, creating a flexible system that adapts to various marketplace interactions.
+
+13. A - OAuth 2.0 authentication.
+    B - JWT (JSON Web Tokens).
+    D - Short-lived access tokens.
+
+**Explanation:** These methods provide the most secure third-party integration. OAuth 2.0 establishes a delegation framework where users authorize specific access without sharing credentials. JWTs securely transmit claims between parties with cryptographic validation. Short-lived tokens limit the window of potential misuse. Together, they create a secure, flexible authentication system for external applications.
+
+14. B - Implementing dynamic, context-aware access restrictions.
+
+**Explanation:** Dynamic, context-aware restrictions provide the most effective protection against unauthorized asset access by adapting security based on factors like user location, time of day, device type, and access patterns. This approach can detect unusual behavior and apply appropriate restrictions, going beyond static rules to address emerging threats and changing access patterns.
+
+15. A - Zero-trust security models.
+    B - AI-powered access monitoring.
+    C - Blockchain-based authentication.
+
+**Explanation:** These emerging approaches will transform user management. Zero-trust models verify every access attempt regardless of source or location. AI-powered monitoring detects subtle patterns of suspicious behavior that rule-based systems miss. Blockchain authentication provides tamper-proof identity verification and access logging. Together, they represent the cutting edge of identity and access management.

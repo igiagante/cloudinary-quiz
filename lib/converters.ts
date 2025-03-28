@@ -19,7 +19,7 @@ export function toQuizQuestion(dbQuestion: QuestionWithOptions): QuizQuestion {
     dbQuestion.options.find((opt) => opt.isCorrect)?.text || "";
 
   return {
-    id: dbQuestion.uuid,
+    id: String(dbQuestion.id),
     question: dbQuestion.question,
     options: shuffledOptions,
     correctAnswer: correctAnswer,
@@ -48,9 +48,9 @@ export function toQuizWithQuestions(dbQuiz: QuizWithQuestions): {
   isComplete: boolean;
 } {
   return {
-    id: dbQuiz.uuid,
+    id: String(dbQuiz.id),
     questions: dbQuiz.questions.map((qq) => ({
-      id: qq.question.uuid,
+      id: String(qq.question.id),
       question: qq.question.question,
       options: qq.question.options.map((opt) => opt.text),
       correctAnswer:
@@ -65,7 +65,7 @@ export function toQuizWithQuestions(dbQuiz: QuizWithQuestions): {
           (opt) => opt.id === qq.userAnswer
         );
         if (option) {
-          answers[qq.question.uuid] = option.text;
+          answers[String(qq.question.id)] = option.text;
         }
       }
       return answers;

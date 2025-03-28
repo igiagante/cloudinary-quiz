@@ -36,14 +36,24 @@ const createPostgresConnection = () => {
     ssl: {
       rejectUnauthorized: false, // Use this if you're connecting to a non-verified SSL server
     },
-    max: 3, // Increased from 1 for better concurrency
-    idle_timeout: 20,
-    connect_timeout: 30,
+    max: 5, // Increased from 3 for better concurrency
+    idle_timeout: 30, // Increased from 20
+    connect_timeout: 60, // Increased from 30 to handle Neon's cold start time
+    max_lifetime: 60 * 30, // Connection lifetime in seconds (30 minutes)
     prepare: false,
+    connection: {
+      application_name: "cloudinary-quiz", // Helps identify the app in Neon logs
+    },
+    debug: process.env.NODE_ENV === "development", // Enable debug logs in dev
+    onnotice: (notice: postgres.Notice) =>
+      console.log("Postgres notice:", notice),
+    retry_limit: 3, // Retry connection attempts
+    retry_delay: 5, // Wait 5 seconds between retries
   };
 
   try {
     if (!globalForPostgres.postgres) {
+      console.log("Creating new Postgres connection...");
       const client = postgres(process.env.POSTGRES_URL, connectionConfig);
 
       // Add a cleanup function
@@ -53,13 +63,34 @@ const createPostgresConnection = () => {
         console.log("Database connection closed");
       };
 
-      // Test the connection
-      client
-        .unsafe(`SELECT 1`)
-        .then(() => console.log("✓ Database connection established"))
-        .catch((error) =>
-          console.error("Database connection test failed:", error)
-        );
+      // Test the connection with retry logic
+      const testConnection = async (retries = 3, delay = 5000) => {
+        try {
+          await client.unsafe(`SELECT 1`);
+          console.log("✓ Database connection established");
+          return true;
+        } catch (error) {
+          console.error(
+            `Database connection test failed (attempt ${4 - retries}/3):`,
+            error
+          );
+
+          if (retries > 1) {
+            console.log(`Retrying in ${delay / 1000} seconds...`);
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            return testConnection(retries - 1, delay);
+          }
+
+          console.error(
+            "Failed to establish database connection after multiple attempts"
+          );
+          // Don't throw - let the app continue and possibly recover later
+          return false;
+        }
+      };
+
+      // Start the test but don't await it - let it run in background
+      testConnection();
 
       globalForPostgres.postgres = client;
     }

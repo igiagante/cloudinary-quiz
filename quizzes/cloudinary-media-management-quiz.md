@@ -228,18 +228,90 @@ E) Manual content tracking
 
 ## Answers
 
-1. B - Advanced folder organization with intelligent tagging provides the most comprehensive asset management strategy.
-2. A - The `cloudinary.search.expression().max_results().execute()` method provides the most robust way to search for assets with specific tags.
-3. A, B, D - Role-based access controls, folder-level permissions, and unique asset identifiers ensure optimal asset access and control.
-4. A - `cloudinary.uploader.rename()` with the `overwrite` option is the correct method for renaming assets.
-5. A, B, D - AI-powered metadata extraction, consistent metadata schema, and automated synchronization provide the most effective approach.
-6. B - Using the `folder` parameter during upload is the most straightforward way to manage folder structures in Cloudinary.
-7. B - Automatic version control with metadata provides the most robust versioning approach.
-8. A, B, D - Automated archiving, AI content analysis, and intelligent expiration management ensure comprehensive lifecycle management.
-9. B - Distributed asset management with intelligent synchronization offers the most flexibility for global content platforms.
-10. A, B, C - Signed URLs, role-based access controls, and public/private asset distinctions provide comprehensive access restrictions.
-11. B - Batch upload with intelligent mapping ensures the most efficient large-scale asset migration.
-12. B - Advanced metadata-driven asset management provides the most optimal workflow for complex marketing needs.
-13. A, B, D - AI-powered semantic search, advanced metadata filtering, and machine learning-enhanced discovery offer the most comprehensive search capabilities.
-14. B - Comprehensive security with dynamic access management ensures the most robust protection of sensitive media assets.
-15. A, B, C - Artificial Intelligence, advanced machine learning, and blockchain asset verification will most transform media asset management.
+1. B - Implementing advanced folder organization with intelligent tagging.
+
+**Explanation:** This approach combines structural organization (folders) with flexible categorization (tags). Advanced folder structures provide logical hierarchy for navigation, while intelligent tagging adds cross-cutting categorization that enables powerful search and filtering capabilities regardless of where assets are stored.
+
+2. A -
+
+```javascript
+cloudinary.search.expression("tags=marketing").max_results(30).execute();
+```
+
+**Explanation:** This is the correct syntax for Cloudinary's search API, which provides powerful querying capabilities. The expression method allows you to build search criteria (in this case, finding assets with the "marketing" tag), while max_results limits the number of results returned, and execute() performs the search.
+
+3. A - Implementing role-based access controls.
+   B - Creating granular folder-level permissions.
+   D - Generating unique asset identifiers.
+
+**Explanation:** These three approaches create a comprehensive access management system. Role-based controls ensure users only see content relevant to their function, folder-level permissions provide structural access boundaries, and unique identifiers enable precise tracking and control of individual assets regardless of their location.
+
+4. A -
+
+```javascript
+cloudinary.uploader.rename("old_public_id", "new_public_id", {
+  overwrite: true,
+});
+```
+
+**Explanation:** This is the correct method for renaming assets in Cloudinary. The uploader.rename method takes the original public_id, the new public_id, and options (in this case, overwrite: true to replace any existing asset with the new name).
+
+5. A - Implementing AI-powered automatic metadata extraction.
+   B - Using consistent metadata schema.
+   D - Automated metadata synchronization.
+
+**Explanation:** These approaches create a scalable metadata management system. AI extraction automatically generates metadata without manual effort, consistent schemas ensure standardized structure across all assets, and automated synchronization keeps metadata current across different systems and platforms.
+
+6. B -
+
+```javascript
+cloudinary.uploader.upload("file", {
+  folder: "marketing/2023",
+});
+```
+
+**Explanation:** While this isn't directly creating a folder, it's the most practical approach in Cloudinary's system. Folders are automatically created when assets are uploaded with the folder parameter, making this the most straightforward way to build and manage folder structures as part of your normal workflow.
+
+7. B - Implementing automatic version control with metadata.
+
+**Explanation:** This approach provides comprehensive versioning by tracking changes systematically without manual intervention. Automatic version control captures the complete history of assets, while metadata enhancement provides context about each version, such as modification timestamps, editor information, and change descriptions.
+
+8. A - Implementing automated archiving policies.
+   B - Using AI for content analysis.
+   D - Intelligent expiration management.
+
+**Explanation:** These strategies create a comprehensive lifecycle management system. Automated archiving moves aging assets to cost-effective storage, AI content analysis helps determine asset value and usage patterns, and intelligent expiration management ensures obsolete content is removed based on business rules rather than arbitrary timeframes.
+
+9. B - Distributed asset management with intelligent synchronization.
+
+**Explanation:** This approach balances local performance with global consistency. Distributed management ensures assets are available close to where they're needed (reducing latency), while intelligent synchronization maintains consistency across locations and adapts to regional needs without creating disconnected silos.
+
+10. A - Using signed URLs.
+    B - Implementing role-based access controls.
+    C - Creating public/private asset distinctions.
+
+**Explanation:** These methods form a layered security approach. Public/private distinctions create basic separation of sensitive assets, role-based controls ensure appropriate access based on user function, and signed URLs provide time-limited, secure access to specific assets that automatically expire.
+
+11. B - Batch upload with intelligent mapping.
+
+**Explanation:** This approach combines efficiency with metadata preservation. Batch processing enables large-scale migration without individual file handling, while intelligent mapping preserves relationships, metadata, and folder structures from the source system to maintain organizational continuity.
+
+12. B - Implementing advanced metadata-driven asset management.
+
+**Explanation:** Metadata-driven management provides flexibility for complex marketing needs. Rather than relying solely on folder structures, this approach uses rich, structured metadata to enable dynamic organization, automated workflows, and powerful search capabilities based on campaign attributes, usage rights, or any other relevant criteria.
+
+13. A - AI-powered semantic search.
+    B - Advanced metadata filtering.
+    D - Machine learning-enhanced discovery.
+
+**Explanation:** These capabilities create a comprehensive search system. Semantic search understands content meaning beyond keywords, advanced metadata filtering enables precise multi-faceted queries, and machine learning-enhanced discovery surfaces relevant content based on usage patterns and content relationships.
+
+14. B - Comprehensive security with dynamic access management.
+
+**Explanation:** This approach provides adaptive protection that responds to changing contexts. Dynamic access management adjusts security controls based on factors like user location, time of access, content sensitivity, and usage patterns, creating a flexible yet secure environment that balances protection with accessibility.
+
+15. A - Artificial Intelligence.
+    B - Advanced machine learning.
+    C - Blockchain asset verification.
+
+**Explanation:** These technologies will fundamentally transform media management. AI and machine learning will revolutionize content analysis, understanding, and automation, while blockchain will transform how digital assets are authenticated, tracked, and monetized throughout their lifecycle.

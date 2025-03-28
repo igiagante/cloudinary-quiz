@@ -24,15 +24,14 @@ END $$;
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "options" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"question_id" text NOT NULL,
+	"question_id" varchar(21) NOT NULL,
 	"text" text NOT NULL,
 	"is_correct" boolean NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "questions" (
-	"id" text PRIMARY KEY NOT NULL,
-	"uuid" uuid DEFAULT gen_random_uuid(),
+	"id" varchar(21) PRIMARY KEY NOT NULL,
 	"question" text NOT NULL,
 	"options" jsonb NOT NULL,
 	"correctAnswer" text NOT NULL,
@@ -57,29 +56,27 @@ CREATE TABLE IF NOT EXISTS "questions" (
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "quiz_questions" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"quiz_id" integer NOT NULL,
-	"question_id" text NOT NULL,
+	"quiz_id" varchar(21) NOT NULL,
+	"question_id" varchar(21) NOT NULL,
 	"user_answer" integer,
 	"is_correct" boolean,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "quizzes" (
-	"id" serial PRIMARY KEY NOT NULL,
-	"uuid" varchar(36) NOT NULL,
-	"user_id" text,
+	"id" varchar(21) PRIMARY KEY NOT NULL,
+	"user_id" varchar(128) NOT NULL,
 	"num_questions" integer NOT NULL,
 	"is_completed" boolean DEFAULT false NOT NULL,
 	"score" integer,
 	"pass_percentage" integer DEFAULT 80 NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
-	"completed_at" timestamp,
-	CONSTRAINT "quizzes_uuid_unique" UNIQUE("uuid")
+	"completed_at" timestamp
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "topic_performance" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"quiz_id" integer NOT NULL,
+	"quiz_id" varchar(21) NOT NULL,
 	"topic" "topic" NOT NULL,
 	"correct" integer NOT NULL,
 	"total" integer NOT NULL,
@@ -98,7 +95,7 @@ CREATE TABLE IF NOT EXISTS "topics" (
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "user_topic_performance" (
 	"id" serial PRIMARY KEY NOT NULL,
-	"user_id" text NOT NULL,
+	"user_id" varchar(21) NOT NULL,
 	"topic" "topic" NOT NULL,
 	"total_quizzes" integer NOT NULL,
 	"total_questions" integer NOT NULL,
@@ -108,15 +105,13 @@ CREATE TABLE IF NOT EXISTS "user_topic_performance" (
 );
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "users" (
-	"id" text PRIMARY KEY NOT NULL,
-	"uuid" varchar(36) NOT NULL,
+	"id" varchar(128) PRIMARY KEY NOT NULL,
 	"email" varchar(255),
 	"name" varchar(255),
 	"avatar_url" text,
 	"is_anonymous" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"last_login_at" timestamp DEFAULT now() NOT NULL,
-	CONSTRAINT "users_uuid_unique" UNIQUE("uuid"),
 	CONSTRAINT "users_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint

@@ -142,23 +142,67 @@ D) Simplified asset management by maintaining a single original file
 
 ## Answers
 
-A) Media Optimizer focuses on image and video manipulation, while DAM provides asset organization and governance
-C) Content-Aware Crop
-B) Create separate Cloudinary accounts with different cloud names for each environment
-A) Showcase improved website performance and faster load times
-B) Highlight reduced infrastructure and storage costs
-B) Use Cloudinary's SDKs and APIs to programmatically manage and deliver assets
-A) https://res.cloudinary.com/<cloud_name>/image/upload/w_200,h_200,c_crop/sample.jpg
-C) Automatic transcoding and adaptive bitrate streaming
-A) Automatically crop images to focus on the product
-B) Generate responsive image breakpoints for different devices
-C) Compress images to reduce file size without losing visual quality
-C) Proxy all uploads through a server-side endpoint to hide the API secret
-B) Overlay the post title and description on a template image using Cloudinary's text overlay capabilities
-C) Crop the featured post image to optimal social media thumbnail dimensions
-C) Restrict access to certain transformation parameters to prevent misuse
-D) Utilize the Cloudinary Upload API with chunk upload support and resume functionality
-C) Access control and user permissions
-A) Store asset metadata and delivery URLs within the CMS content model
-C) Utilize Cloudinary's CMS integrations or plugins for seamless synchronization
-D) Simplified asset management by maintaining a single original file
+1. A - Media Optimizer focuses on image and video manipulation, while DAM provides asset organization and governance.
+
+**Explanation:** Media Optimizer is primarily focused on transforming and optimizing media assets for performance and visual quality. DAM (Digital Asset Management) provides comprehensive tools for organizing, categorizing, and managing the entire lifecycle of digital assets including metadata, permissions, and workflows.
+
+2. C - Content-Aware Crop.
+
+**Explanation:** Content-Aware Crop is specifically designed to intelligently crop images by analyzing their content to determine the most important areas to preserve. This makes it ideal for automatic cropping that maintains the focus on the subject matter.
+
+3. B - Create separate Cloudinary accounts with different cloud names for each environment.
+
+**Explanation:** This is the recommended approach as it provides complete isolation between environments. It ensures that development activities don't affect production assets and vice versa, with clear separation of resources, billing, and security.
+
+4. A - Showcase improved website performance and faster load times.
+   B - Highlight reduced infrastructure and storage costs.
+
+**Explanation:** These demonstrate the most tangible business value. Improved user experience through faster page loads impacts conversion rates, while cost savings come from more efficient storage and delivery infrastructure.
+
+5. B - Use Cloudinary's SDKs and APIs to programmatically manage and deliver assets.
+
+**Explanation:** This approach provides the most flexibility and control. It allows for seamless integration into existing application workflows while taking full advantage of Cloudinary's optimization capabilities.
+
+6. A - `https://res.cloudinary.com/<cloud_name>/image/upload/w_200,h_200,c_crop/sample.jpg`.
+
+**Explanation:** This URL correctly uses the crop (c_crop) transformation with width and height parameters. It creates a 200x200 square crop of the original image.
+
+7. C - Automatic transcoding and adaptive bitrate streaming.
+
+**Explanation:** This is Cloudinary's key video advantage. It automatically converts videos to optimal formats for different browsers and creates adaptive streams that adjust quality based on the viewer's bandwidth, eliminating complex video processing infrastructure.
+
+8. A - Automatically crop images to focus on the product.
+   B - Generate responsive image breakpoints for different devices.
+   C - Compress images to reduce file size without losing visual quality.
+
+**Explanation:** These three strategies ensure products are displayed optimally on all devices with fast load times. Content-aware cropping maintains product focus, responsive breakpoints deliver appropriate sizes for each device, and intelligent compression reduces file sizes while preserving visual quality.
+
+9. C - Proxy all uploads through a server-side endpoint to hide the API secret.
+
+**Explanation:** This approach keeps the API secret secure on the server side. It prevents the secret from being exposed in client-side code, which could be inspected and potentially misused.
+
+10. B - Overlay the post title and description on a template image using Cloudinary's text overlay capabilities.
+    C - Crop the featured post image to optimal social media thumbnail dimensions.
+
+**Explanation:** These techniques allow automated generation of properly formatted social media previews. Text overlays let you dynamically add post content on images, while cropping ensures the preview fits social platform requirements.
+
+11. C - Restrict access to certain transformation parameters to prevent misuse.
+
+**Explanation:** Strict transformations allow you to control which transformation parameters can be used. This prevents potentially costly or resource-intensive operations from being performed without authorization.
+
+12. D - Utilize the Cloudinary Upload API with chunk upload support and resume functionality.
+
+**Explanation:** This approach breaks large files into smaller chunks and supports upload resumption after interruptions. This makes it ideal for large file uploads over unreliable networks.
+
+13. C - Access control and user permissions.
+
+**Explanation:** This feature allows granular control over who can access, modify, or use specific assets. It protects brand assets from unauthorized use and ensures proper rights management.
+
+14. A - Store asset metadata and delivery URLs within the CMS content model.
+    C - Utilize Cloudinary's CMS integrations or plugins for seamless synchronization.
+
+**Explanation:** These approaches ensure tight integration between content and media. Storing metadata and URLs in the CMS connects content to media assets, while using official integrations provides streamlined workflows.
+
+15. D - Simplified asset management by maintaining a single original file.
+
+**Explanation:** By storing only the original high-quality asset and generating transformations on-demand, you reduce storage needs. This simplifies management while maintaining flexibility to create any needed variant.

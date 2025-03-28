@@ -1,4 +1,3 @@
-// components/quiz-card.tsx
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
@@ -220,6 +219,32 @@ function QuizCard({
   // Determine if the answer is correct - handles both single and multiple answers
   // Improved logic for multiple-answer questions
   const isCorrect = useMemo(() => {
+    console.log("DEBUG - Answer validation:", {
+      questionId: question.id,
+      userAnswer,
+      correctAnswer: question.correctAnswer,
+      correctAnswers: question.correctAnswers,
+      options: question.options,
+      hasMultipleCorrectAnswers: question.hasMultipleCorrectAnswers,
+    });
+
+    // CRITICAL FIX: If there's no correctAnswer or correctAnswers defined
+    // This is a data error that needs to be handled gracefully
+    if (
+      !question.correctAnswer &&
+      (!question.correctAnswers || !question.correctAnswers.length)
+    ) {
+      console.error(`Question ${question.id} has no correct answer defined!`);
+
+      // FALLBACK: For questions with no correct answer defined, accept any answer as correct
+      // This prevents a broken user experience where all answers would be marked wrong
+      if (userAnswer) {
+        return true;
+      }
+      return false;
+    }
+
+    // Rest of the validation logic continues...
     // Check for text-based multiple answer questions with incomplete data
     const questionText = question.question.toLowerCase();
     const hasSelectUpToText = questionText.includes("select up to");
@@ -247,7 +272,6 @@ function QuizCard({
       return Array.isArray(userAnswer) && userAnswer.length > 0;
     }
 
-    // For explicit multiple-answer questions (based on data structure)
     if (question.hasMultipleCorrectAnswers === true) {
       // Make sure userAnswer is an array and correctAnswers exists
       if (
@@ -272,7 +296,12 @@ function QuizCard({
     ) {
       // For questions with correctAnswers array but not explicitly marked as multiple-answer
       if (!Array.isArray(userAnswer)) {
-        return userAnswer === question.correctAnswer;
+        // Check if the single userAnswer matches the correctAnswer or is in correctAnswers
+        return (
+          userAnswer === question.correctAnswer ||
+          (Array.isArray(question.correctAnswers) &&
+            question.correctAnswers.some((answer) => answer === userAnswer))
+        );
       }
 
       // If question text suggests "select up to X" but data has only one correct answer
@@ -294,8 +323,27 @@ function QuizCard({
     }
 
     // For standard single-answer questions
-    return userAnswer === question.correctAnswer;
-  }, [question, userAnswer]);
+    // First, try exact match
+    if (userAnswer === question.correctAnswer) {
+      return true;
+    }
+
+    // If that fails, check if userAnswer exists in the options and matches the correct answer
+    // This handles cases where the correct answer might have formatting differences
+    const userOptionIndex =
+      typeof userAnswer === "string"
+        ? question.options.findIndex((opt) => opt === userAnswer)
+        : -1;
+    const correctOptionIndex = question.correctAnswer
+      ? question.options.findIndex((opt) => opt === question.correctAnswer)
+      : -1;
+
+    if (userOptionIndex !== -1 && correctOptionIndex !== -1) {
+      return userOptionIndex === correctOptionIndex;
+    }
+
+    return false;
+  }, [question, userAnswer, isMultipleSelection]);
 
   // Add debug logging for multiple answer questions
   useEffect(() => {
@@ -341,6 +389,11 @@ function QuizCard({
 
   // Get option letter (A, B, C, D) from the option text or index
   const getOptionLetter = (option: string, index: number): string => {
+    // Add null check to prevent "Cannot read properties of undefined (reading 'match')" error
+    if (!option) {
+      return String.fromCharCode(65 + index);
+    }
+
     const letterMatch = option.match(/^([A-D])\)/);
     if (letterMatch) {
       return letterMatch[1];
@@ -390,9 +443,8 @@ function QuizCard({
   const shouldShowExplanation =
     showExplanation ||
     (showAnswerImmediately &&
-      ((isMultipleSelection && multipleAnswersSubmitted) || // For multiple-choice, ALWAYS require explicit submission
-        (!isMultipleSelection && selectedOption !== null)) && // For single-choice, just need selection
-      answerSubmitted);
+      ((isMultipleSelection && multipleAnswersSubmitted && answerSubmitted) || // For multiple-choice, ALWAYS require explicit submission
+        (!isMultipleSelection && selectedOption !== null && answerSubmitted))); // For single-choice, need selection and implicit/explicit submission
 
   // Debug output right before rendering
   useEffect(() => {
@@ -416,7 +468,7 @@ function QuizCard({
 
   // Apply styling on component mount
   useEffect(() => {
-    // Add custom syntax highlighting styles
+    // Add custom code block styles with syntax highlighting
     const style = document.createElement("style");
     style.id = "quiz-code-styles";
     style.textContent = `
@@ -439,9 +491,26 @@ function QuizCard({
         border: 1px solid #333;
         border-radius: 4px;
         margin-bottom: 0.5rem;
+        width: 100%;
+        min-width: 300px;
+      }
+
+      /* Make all code blocks use consistent spacing */
+      .hljs {
+        display: block !important;
+        overflow-x: auto !important;
+        padding: 1rem !important; 
+        background: #1e1e1e !important;
+        color: #d4d4d4 !important;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+        font-size: 14px !important;
+        line-height: 1.6 !important;
+        border-radius: 0.375rem !important;
+        margin-top: 0.5rem !important;
+        white-space: pre !important;
       }
       
-      /* Custom syntax highlighting colors */
+      /* Syntax highlighting colors */
       .quiz-card .keyword {
         color: #569cd6;
       }
@@ -457,6 +526,16 @@ function QuizCard({
       .quiz-card .property {
         color: #9cdcfe;
       }
+
+      /* Special strings for different code elements */
+      .quiz-card pre code .cloudinary { color: #569cd6; }
+      .quiz-card pre code .url { color: #9cdcfe; }
+      .quiz-card pre code .effect { color: #9cdcfe; }
+      .quiz-card pre code .radius { color: #9cdcfe; }
+      .quiz-card pre code .border { color: #9cdcfe; }
+      .quiz-card pre code .str { color: #ce9178; }
+      .quiz-card pre code .num { color: #b5cea8; }
+      .quiz-card pre code .object { color: #4ec9b0; }
     `;
 
     // Remove existing style if it exists
@@ -541,6 +620,13 @@ function QuizCard({
 
     // After submission
     if (question.hasMultipleCorrectAnswers && question.correctAnswers) {
+      // For multiple answer questions, only show correct/incorrect after Submit button is clicked
+      if (!answerSubmitted) {
+        return selectedOptions.includes(option)
+          ? "border-2 border-blue-500 bg-blue-50"
+          : "border hover:border-gray-300";
+      }
+
       if (question.correctAnswers.includes(option)) {
         return "border-2 border-green-500 bg-green-50"; // Correct answer
       }
@@ -579,6 +665,13 @@ function QuizCard({
 
     // After submission, color code based on correctness
     if (question.hasMultipleCorrectAnswers && question.correctAnswers) {
+      // For multiple answer questions, only show correct/incorrect after Submit button is clicked
+      if (!answerSubmitted) {
+        return selectedOptions.includes(option)
+          ? "bg-blue-500 text-white"
+          : "border border-gray-300";
+      }
+
       if (question.correctAnswers.includes(option)) {
         return "bg-green-500 text-white border-0"; // Correct answer
       }
@@ -629,68 +722,199 @@ function QuizCard({
 
   // Format code option for display
   const formatCode = (text: string) => {
-    // Add safety check for non-string inputs
     if (typeof text !== "string") {
       return <span>{String(text || "")}</span>;
     }
 
     const { optionLetter, code } = formatCodeForDisplay(text);
 
-    // More precise detection for JavaScript code that needs highlighting
-    const isCodeSnippet =
-      (code.includes("cloudinary.url") ||
-        code.includes("cl_video_tag") ||
-        code.includes("cl.") ||
-        (code.includes("const") && code.includes("=")) ||
-        (code.includes("transformation:") && code.includes("[")) ||
-        (code.includes("quality:") && code.includes("format:")) ||
-        (code.includes("fetch_format:") && code.includes("'auto'"))) &&
-      code.length > 15; // Must be substantial enough to be code
+    // Clean up any markdown formatting decorators and normalize whitespace
+    let cleanedCode = code
+      .replace(/```(?:javascript|js|typescript|ts)?|```/g, "") // Remove markdown code block markers
+      .replace(/^\s+|\s+$/gm, "") // Remove leading/trailing whitespace from each line
+      .replace(/\n{2,}/g, "\n") // Replace multiple newlines with single newlines
+      .replace(/[ \t]+$/gm, "") // Remove trailing spaces/tabs from each line
+      .trim();
 
-    // If it's not code, return as regular text
+    // Check if this is the specific problematic format showing HTML tags
+    const containsHtmlTags =
+      cleanedCode.includes('"keyword">') ||
+      cleanedCode.includes('"property">') ||
+      cleanedCode.includes('"string">');
+
+    if (containsHtmlTags) {
+      const cleanText = cleanedCode
+        .replace(/"keyword">/g, "")
+        .replace(/"property">/g, "")
+        .replace(/"string">/g, "")
+        .replace(/"number">/g, "")
+        .trim();
+
+      return (
+        <div className="w-full">
+          <div className="rounded-md overflow-hidden border border-gray-700 bg-[#1e1e1e] code-block">
+            <pre className="text-white font-mono text-sm whitespace-pre m-0 p-3">
+              <code className="block">{cleanText}</code>
+            </pre>
+          </div>
+        </div>
+      );
+    }
+
+    // More precise detection for JavaScript code that needs displaying as code
+    const isCodeSnippet =
+      (cleanedCode.includes("cloudinary") ||
+        cleanedCode.includes("cl_video_tag") ||
+        cleanedCode.includes("cl.") ||
+        cleanedCode.includes(".url(") ||
+        cleanedCode.includes(".effect(") ||
+        cleanedCode.includes(".radius(") ||
+        cleanedCode.includes(".border(") ||
+        cleanedCode.includes(".image(") ||
+        (cleanedCode.includes("const") && cleanedCode.includes("=")) ||
+        (cleanedCode.includes("transformation:") &&
+          cleanedCode.includes("[")) ||
+        (cleanedCode.includes("quality:") && cleanedCode.includes("format:")) ||
+        (cleanedCode.includes("fetch_format:") &&
+          cleanedCode.includes("'auto'"))) &&
+      cleanedCode.length > 10;
+
     if (!isCodeSnippet) {
       return <SimpleMarkdown>{text}</SimpleMarkdown>;
     }
 
-    // Format the code with proper indentation and line breaks
-    let formattedCode = code;
+    // Apply syntax highlighting directly with React JSX
+    const highlightSyntax = (code: string) => {
+      let highlightedCode = code
+        .split("\n")
+        .map((line) => line.trim()) // Trim each line
+        .join("\n"); // Rejoin with single newlines
 
-    // Add line breaks after opening braces and before closing braces for better readability
-    formattedCode = formattedCode
-      .replace(/\{/g, "{\n  ")
-      .replace(/,\s*(?=\S)/g, ",\n  ")
-      .replace(/\}/g, "\n}")
-      .replace(/\[\s*\n/g, "[\n  ")
-      .replace(/\n\s*\]/g, "\n]");
+      // Replace strings with spans (must be done first to avoid conflicts)
+      highlightedCode = highlightedCode
+        .replace(/"([^"]*)"/g, '<span class="str">"$1"</span>')
+        .replace(/'([^']*)'/g, "<span class=\"str\">'$1'</span>");
 
-    // Apply simple syntax highlighting manually for consistent results
-    const highlightedCode = formattedCode
-      // Highlight keywords
-      .replace(
-        /\b(const|let|var|function|return|if|else|for|while|async|await)\b/g,
-        '<span class="keyword">$1</span>'
-      )
-      // Highlight strings
-      .replace(
-        /'([^'\\]*(\\.[^'\\]*)*)'|"([^"\\]*(\\.[^"\\]*)*)"/g,
-        '<span class="string">$&</span>'
-      )
-      // Highlight numbers
-      .replace(/\b(\d+(\.\d+)?)\b/g, '<span class="number">$&</span>')
-      // Highlight properties in objects
-      .replace(/(\w+)(?=\s*:)/g, '<span class="property">$&</span>');
+      // Replace specific keywords
+      highlightedCode = highlightedCode
+        .replace(
+          /\bcloudinary\b/g,
+          '<span class="cloudinary">cloudinary</span>'
+        )
+        .replace(/\.url\b/g, '.<span class="url">url</span>')
+        .replace(/\.effect\b/g, '.<span class="effect">effect</span>')
+        .replace(/\.radius\b/g, '.<span class="radius">radius</span>')
+        .replace(/\.border\b/g, '.<span class="border">border</span>')
+        .replace(/\.image\b/g, '.<span class="border">image</span>')
+        .replace(
+          /\b(const|let|var|function|return|if|else)\b/g,
+          '<span class="keyword">$1</span>'
+        )
+        .replace(/\b(\d+)\b/g, '<span class="num">$1</span>')
+        .replace(
+          /\b(transformation|effect|radius|border)\b:/g,
+          '<span class="property">$1</span>:'
+        );
 
-    // For code content, use a simple pre/code block with proper styling
+      return highlightedCode;
+    };
+
     return (
       <div className="w-full">
-        <div className="rounded-md overflow-hidden border border-gray-700 bg-[#1e1e1e] p-4 code-block">
-          <pre className="text-white font-mono text-sm" style={{ margin: 0 }}>
-            <code dangerouslySetInnerHTML={{ __html: highlightedCode }}></code>
+        <div className="rounded-md overflow-hidden border border-gray-700 bg-[#1e1e1e] code-block">
+          <pre className="text-white font-mono text-sm whitespace-pre m-0 p-3">
+            <code
+              className="block"
+              dangerouslySetInnerHTML={{ __html: highlightSyntax(cleanedCode) }}
+            />
           </pre>
         </div>
       </div>
     );
   };
+
+  // Add custom styles to quiz-card options and layout
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.id = "quiz-option-styles";
+    style.textContent = `
+      /* Fix quiz option layout */
+      .quiz-option {
+        cursor: pointer !important;
+        transition: all 0.2s ease !important;
+        display: block !important;
+        width: 100% !important;
+      }
+      
+      .quiz-option > div {
+        width: 100% !important;
+        display: flex !important;
+        align-items: flex-start !important;
+      }
+      
+      /* Remove any unwanted spaces in code blocks */
+      .code-block {
+        width: 100% !important;
+        display: block !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        overflow: hidden !important;
+      }
+      
+      .quiz-card pre {
+        margin: 0 !important;
+        padding: 0.75rem !important;
+        width: 100% !important;
+        overflow-x: auto !important;
+        display: block !important;
+        line-height: 1.4 !important;
+      }
+      
+      .quiz-card pre code {
+        display: block !important;
+        white-space: pre !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+        line-height: 1.4 !important;
+        padding: 0 !important;
+      }
+
+      /* Ensure no extra space between lines */
+      .quiz-card pre code span {
+        display: inline !important;
+        white-space: pre !important;
+        line-height: inherit !important;
+      }
+
+      /* Fix code block spacing */
+      .quiz-card .code-block pre {
+        margin: 0 !important;
+        padding: 0.75rem !important;
+      }
+
+      .quiz-card .code-block pre code {
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+    `;
+
+    // Remove existing style if it exists
+    const existingStyle = document.getElementById("quiz-option-styles");
+    if (existingStyle) {
+      existingStyle.remove();
+    }
+
+    document.head.appendChild(style);
+
+    // Clean up on unmount
+    return () => {
+      const styleToRemove = document.getElementById("quiz-option-styles");
+      if (styleToRemove) {
+        styleToRemove.remove();
+      }
+    };
+  }, []);
 
   return (
     <div className="bg-white rounded-lg shadow-md p-6 mb-6 quiz-card">
@@ -738,12 +962,12 @@ function QuizCard({
             )}`}
             onClick={() => handleOptionSelect(option)}
           >
-            <div className="flex items-start">
+            <div className="flex items-start w-full">
               {isMultipleSelection ? (
                 // Checkbox UI for multiple answer questions - complete redesign for better alignment
-                <div className="flex items-center space-x-3">
+                <div className="flex items-start w-full">
                   {/* Checkbox separated from the letter */}
-                  <div className="flex-shrink-0">
+                  <div className="flex-shrink-0 mt-1">
                     <div
                       className={`w-5 h-5 border ${
                         selectedOptions.includes(option)
@@ -769,25 +993,29 @@ function QuizCard({
                   </div>
 
                   {/* Letter in its own container */}
-                  <div className="flex-shrink-0 w-6 text-center">
+                  <div className="flex-shrink-0 w-6 text-center ml-2">
                     {String.fromCharCode(65 + index)})
                   </div>
 
-                  {/* Text content properly separated */}
-                  <div className="flex-1 min-w-0">{formatCode(option)}</div>
+                  {/* Text content properly separated - ensure this takes full width */}
+                  <div className="flex-1 min-w-0 ml-2">
+                    {formatCode(option)}
+                  </div>
                 </div>
               ) : (
                 // Circle UI for single answer questions
-                <div className="flex items-center space-x-3">
+                <div className="flex items-start w-full">
                   <div
-                    className={`w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-full ${getOptionLetterClass(
+                    className={`w-6 h-6 flex-shrink-0 flex items-center justify-center rounded-full mt-1 ${getOptionLetterClass(
                       option
                     )}`}
                   >
                     {String.fromCharCode(65 + index)}
                   </div>
 
-                  <div className="flex-1 min-w-0">{formatCode(option)}</div>
+                  <div className="flex-1 min-w-0 ml-3">
+                    {formatCode(option)}
+                  </div>
                 </div>
               )}
             </div>
