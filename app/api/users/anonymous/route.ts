@@ -1,7 +1,6 @@
 // app/api/users/anonymous/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { userRepository } from "@/lib/db/repositories/user.repository";
-import { v4 as uuidv4 } from "uuid";
 
 export async function POST(request: NextRequest) {
   try {

@@ -57,7 +57,6 @@ function logQuestionProcessing(
   q: QuestionWithOptions,
   isVerbose: boolean = false
 ) {
-  const questionId = q.uuid;
   const topic = q.topic;
   const optionsCount = q.options?.length || 0;
 
@@ -67,24 +66,18 @@ function logQuestionProcessing(
   }
 
   // Detailed logs only when verbose mode is enabled
-  reportProgress(
-    `Processing question ${questionId.substring(0, 8)}... (${topic})`,
-    "debug"
-  );
+  reportProgress(`Processing question ${q.id}... (${topic})`, "debug");
 
   if (optionsCount < 2) {
     reportProgress(
-      `Warning: Question ${questionId.substring(
-        0,
-        8
-      )}... has only ${optionsCount} options`,
+      `Warning: Question ${q.id} has only ${optionsCount} options`,
       "warn"
     );
   }
 
   // Log final question state in compact JSON format
   const summary = {
-    id: questionId.substring(0, 8) + "...",
+    id: q.id.toString(),
     topic,
     optionsCount,
     hasCorrectAnswer: q.options?.some((o) => o.isCorrect) || false,
@@ -136,9 +129,7 @@ export function formatQuestionWithShuffledOptions(
         }
       }
     } catch (e) {
-      console.error(
-        `Error parsing options for question ${q.uuid.substring(0, 8)}...`
-      );
+      console.error(`Error parsing options for question ${q.id}...`);
     }
   }
 
@@ -168,7 +159,7 @@ export function formatQuestionWithShuffledOptions(
       }
     } catch (e) {
       console.error(
-        `Error extracting options from question text for ${q.uuid}:`,
+        `Error extracting options from question text for ${q.id}:`,
         e
       );
     }
@@ -180,9 +171,7 @@ export function formatQuestionWithShuffledOptions(
     !Array.isArray(questionOptions) ||
     questionOptions.length < 2
   ) {
-    console.error(
-      `Question ${q.uuid.substring(0, 8)}... has invalid options - skipped`
-    );
+    console.error(`Question ${q.id} has invalid options - skipped`);
     return null;
   }
 
@@ -356,7 +345,7 @@ export function formatQuestionWithShuffledOptions(
 
   if (correctOptions.length === 0) {
     console.error(
-      `ERROR: Question ${q.uuid} has no correct answer among options`
+      `ERROR: Question ${q.id} has no correct answer among options`
     );
     // Default to first option as correct
     shuffledOptions[0].isCorrect = true;
@@ -364,7 +353,7 @@ export function formatQuestionWithShuffledOptions(
   }
 
   const result: QuizQuestion = {
-    id: q.uuid,
+    id: q.id.toString(),
     question: q.question,
     options: shuffledOptions.map((o) => o.text),
     correctAnswer:

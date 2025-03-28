@@ -1,9 +1,8 @@
 // app/admin/page.tsx
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { cloudinaryTopicList } from "@/types/constants";
-import { questionRepository } from "@/lib/db/repositories/question.repository";
 import { QuizQuestion, Topic } from "@/types";
 import Link from "next/link";
 
@@ -26,21 +25,11 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Use API endpoints instead of direct DB access when in browser
-  const isBrowser = useMemo(() => typeof window !== "undefined", []);
-
   useEffect(() => {
     // Load stats and questions
-    if (isBrowser) {
-      // Use API endpoints in browser environment
-      loadStatsFromApi();
-      loadQuestionsFromApi();
-    } else {
-      // Direct DB access in server environment
-      loadStats();
-      loadQuestions();
-    }
-  }, [isBrowser]);
+    loadStatsFromApi();
+    loadQuestionsFromApi();
+  }, []);
 
   const loadStatsFromApi = async () => {
     try {
@@ -75,37 +64,6 @@ export default function AdminDashboard() {
     }
   };
 
-  const loadStats = async () => {
-    try {
-      const dbStats = await questionRepository.getStats();
-      setStats(dbStats);
-    } catch (err) {
-      console.error("Error loading stats:", err);
-      setError("Failed to load database statistics");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadQuestions = async () => {
-    try {
-      const dbQuestions = await questionRepository.getAll();
-      const formattedQuestions = dbQuestions.map((q) => ({
-        id: q.uuid,
-        question: q.question,
-        options: q.options.map((o) => o.text),
-        correctAnswer: q.options.find((o) => o.isCorrect)?.text || "",
-        explanation: q.explanation,
-        topic: q.topic as Topic,
-        difficulty: q.difficulty as "easy" | "medium" | "hard",
-      }));
-      setQuestions(formattedQuestions);
-    } catch (err) {
-      console.error("Error loading questions:", err);
-      setError("Failed to load questions from the database");
-    }
-  };
-
   const filteredQuestions = questions.filter((q) => {
     const topicMatch = filterTopic === "all" || q.topic === filterTopic;
     const difficultyMatch =
@@ -122,28 +80,18 @@ export default function AdminDashboard() {
     if (!selectedQuestion) return;
 
     try {
-      if (isBrowser) {
-        // Use API endpoint for deletion in browser
-        const response = await fetch(`/api/questions/${selectedQuestion.id}`, {
-          method: "DELETE",
-        });
+      // Use API endpoint for deletion
+      const response = await fetch(`/api/questions/${selectedQuestion.id}`, {
+        method: "DELETE",
+      });
 
-        if (!response.ok) {
-          throw new Error("Failed to delete question");
-        }
-      } else {
-        // Direct DB access
-        await questionRepository.delete(selectedQuestion.id);
+      if (!response.ok) {
+        throw new Error("Failed to delete question");
       }
 
       // Refresh the data
-      if (isBrowser) {
-        loadQuestionsFromApi();
-        loadStatsFromApi();
-      } else {
-        loadQuestions();
-        loadStats();
-      }
+      loadQuestionsFromApi();
+      loadStatsFromApi();
     } catch (error) {
       console.error("Error deleting question:", error);
     }
@@ -160,30 +108,18 @@ export default function AdminDashboard() {
       )
     ) {
       try {
-        if (isBrowser) {
-          // Use API endpoint for clearing all in browser
-          const response = await fetch("/api/questions/clear-all", {
-            method: "DELETE",
-          });
+        // Use API endpoint for clearing all
+        const response = await fetch("/api/questions/clear-all", {
+          method: "DELETE",
+        });
 
-          if (!response.ok) {
-            throw new Error("Failed to clear questions");
-          }
-        } else {
-          // Delete all questions one by one with direct DB access
-          await Promise.all(
-            questions.map((q) => questionRepository.delete(q.id))
-          );
+        if (!response.ok) {
+          throw new Error("Failed to clear questions");
         }
 
         // Refresh the data
-        if (isBrowser) {
-          loadQuestionsFromApi();
-          loadStatsFromApi();
-        } else {
-          loadQuestions();
-          loadStats();
-        }
+        loadQuestionsFromApi();
+        loadStatsFromApi();
       } catch (error) {
         console.error("Error clearing questions:", error);
       }

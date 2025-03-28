@@ -2,9 +2,9 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import QuestionUpload from "@/components/question-upload";
-import { QuestionInput } from "@/lib/db/repositories/question.repository";
+import QuestionUpload, { QuestionInput } from "@/components/question-upload";
 import Link from "next/link";
+import { Topic } from "@/types";
 
 export default function UploadPage() {
   const router = useRouter();

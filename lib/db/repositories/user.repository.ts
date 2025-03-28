@@ -1,4 +1,3 @@
-// @ts-nocheck
 // TODO: Refactor this file to properly define types for Drizzle ORM queries
 // - Update Drizzle ORM to latest version
 // - Define proper relations in schema
@@ -11,8 +10,10 @@ import {
   topicPerformance,
   userTopicPerformance,
   topicEnum,
+  User,
+  Quiz,
 } from "../schema";
-import { v4 as uuidv4 } from "uuid";
+import { nanoid } from "nanoid";
 
 export type UserProfile = {
   id: string;
@@ -36,6 +37,26 @@ export type UserProfile = {
   }>;
 };
 
+// Define type for quiz with minimal properties we need
+interface QuizWithScore {
+  id: string;
+  isCompleted: boolean;
+  score: number | null;
+  passPercentage: number;
+}
+
+// Define type for topic performance stats
+interface TopicStat {
+  id: number;
+  topic: string;
+  total: number;
+  correct: number;
+  percentage: number;
+  totalQuizzes: number;
+  totalQuestions: number;
+  correctAnswers: number;
+}
+
 export const userRepository = {
   /**
    * Create a new user (anonymous or authenticated)
@@ -49,8 +70,7 @@ export const userRepository = {
     const [user] = await db
       .insert(users)
       .values({
-        id: uuidv4(),
-        uuid: uuidv4(),
+        id: nanoid(),
         email: data.email,
         name: data.name,
         avatarUrl: data.avatarUrl,
@@ -58,17 +78,17 @@ export const userRepository = {
         createdAt: new Date(),
         lastLoginAt: new Date(),
       })
-      .returning({ uuid: users.uuid });
+      .returning();
 
-    return user.uuid;
+    return user.id;
   },
 
   /**
-   * Get a user by UUID
+   * Get a user by ID
    */
-  async getByUuid(uuid: string): Promise<UserProfile | null> {
+  async getById(id: string): Promise<UserProfile | null> {
     const user = await db.query.users.findFirst({
-      where: eq(users.uuid, uuid),
+      where: eq(users.id, id),
     });
 
     if (!user) return null;
@@ -79,9 +99,12 @@ export const userRepository = {
       .from(quizzes)
       .where(eq(quizzes.userId, user.id));
 
-    const completedQuizzes = userQuizzes.filter((quiz) => quiz.isCompleted);
+    const completedQuizzes = userQuizzes.filter(
+      (quiz: QuizWithScore) => quiz.isCompleted
+    );
     const passedQuizzes = completedQuizzes.filter(
-      (quiz) => quiz.score && quiz.score >= quiz.passPercentage
+      (quiz: QuizWithScore) =>
+        quiz.score !== null && quiz.score >= quiz.passPercentage
     );
 
     // Get topic performance
@@ -91,7 +114,7 @@ export const userRepository = {
       .where(eq(userTopicPerformance.userId, user.id));
 
     return {
-      id: user.uuid,
+      id: user.id,
       email: user.email || undefined,
       name: user.name || undefined,
       avatarUrl: user.avatarUrl || undefined,
@@ -103,7 +126,7 @@ export const userRepository = {
         averageScore:
           completedQuizzes.length > 0
             ? completedQuizzes.reduce(
-                (sum, quiz) => sum + (quiz.score || 0),
+                (sum: number, quiz: QuizWithScore) => sum + (quiz.score || 0),
                 0
               ) / completedQuizzes.length
             : 0,
@@ -112,7 +135,7 @@ export const userRepository = {
             ? (passedQuizzes.length / completedQuizzes.length) * 100
             : 0,
       },
-      topicPerformance: userTopicStats.map((stat) => ({
+      topicPerformance: userTopicStats.map((stat: TopicStat) => ({
         topic: stat.topic,
         totalQuizzes: stat.totalQuizzes,
         totalQuestions: stat.totalQuestions,
@@ -125,26 +148,23 @@ export const userRepository = {
   /**
    * Get a user by email
    */
-  async getByEmail(
-    email: string
-  ): Promise<{ id: string; uuid: string } | null> {
-    const user = await db
+  async getByEmail(email: string): Promise<{ id: string } | null> {
+    const results = await db
       .select({
         id: users.id,
-        uuid: users.uuid,
       })
       .from(users)
       .where(eq(users.email, email))
       .limit(1);
 
-    return user.length > 0 ? user[0] : null;
+    return results.length > 0 ? results[0] : null;
   },
 
   /**
    * Update user info
    */
   async update(
-    uuid: string,
+    id: string,
     data: {
       email?: string;
       name?: string;
@@ -158,8 +178,8 @@ export const userRepository = {
         ...data,
         lastLoginAt: new Date(),
       })
-      .where(eq(users.uuid, uuid))
-      .returning({ id: users.id });
+      .where(eq(users.id, id))
+      .returning();
 
     return result.length > 0;
   },
@@ -169,7 +189,7 @@ export const userRepository = {
    */
   async updateTopicPerformance(
     userId: string,
-    quizId: number,
+    quizId: string,
     tx = db
   ): Promise<void> {
     try {
@@ -193,19 +213,21 @@ export const userRepository = {
             eq(userTopicPerformance.userId, userId),
             inArray(
               userTopicPerformance.topic,
-              quizTopicStats.map((stat) => stat.topic)
+              quizTopicStats.map((stat: TopicStat) => stat.topic)
             )
           )
         );
 
       // Create a lookup map for existing stats
       const existingStatsMap = new Map(
-        existingStats.map((stat) => [stat.topic, stat])
+        existingStats.map((stat: TopicStat) => [stat.topic, stat])
       );
 
       // Process all topics at once
       for (const topicStat of quizTopicStats) {
-        const existing = existingStatsMap.get(topicStat.topic);
+        const existing = existingStatsMap.get(topicStat.topic) as
+          | TopicStat
+          | undefined;
 
         if (existing) {
           updates.push({
@@ -275,7 +297,9 @@ export const userRepository = {
     const allTopics = Object.values(topicEnum.enumValues);
 
     return allTopics.map((topic) => {
-      const topicData = userPerformance.find((perf) => perf.topic === topic);
+      const topicData = userPerformance.find(
+        (perf: { topic: string }) => perf.topic === topic
+      );
 
       return {
         topic,

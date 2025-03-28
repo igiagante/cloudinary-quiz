@@ -1,8 +1,6 @@
-// app/admin/database/page.tsx
 "use client";
 
 import React, { useState } from "react";
-import { questionRepository } from "@/lib/db/repositories/question.repository";
 import Link from "next/link";
 
 export default function DatabaseManagement() {
@@ -26,19 +24,37 @@ export default function DatabaseManagement() {
     setStatus("Processing...");
 
     try {
-      // Get current question count
-      const existingQuestions = await questionRepository.getAll();
-      const existingCount = existingQuestions.length;
+      // Get current question count from API
+      const existingResponse = await fetch("/api/questions");
+      if (!existingResponse.ok) {
+        throw new Error("Failed to get existing questions");
+      }
+      const existingData = await existingResponse.json();
+      const existingCount = existingData.questions.length;
 
       // Read and parse the JSON file
       const jsonData = JSON.parse(await file.text());
 
-      // Save questions to the database
-      await questionRepository.bulkInsert(jsonData);
+      // Save questions to the database via API
+      const importResponse = await fetch("/api/admin/questions/bulk", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ questions: jsonData }),
+      });
+
+      if (!importResponse.ok) {
+        throw new Error("Failed to import questions");
+      }
 
       // Get new count
-      const updatedQuestions = await questionRepository.getAll();
-      const newCount = updatedQuestions.length;
+      const updatedResponse = await fetch("/api/questions");
+      if (!updatedResponse.ok) {
+        throw new Error("Failed to get updated questions");
+      }
+      const updatedData = await updatedResponse.json();
+      const newCount = updatedData.questions.length;
 
       setStatus(
         `Successfully imported ${
@@ -55,7 +71,13 @@ export default function DatabaseManagement() {
 
   const handleDownload = async () => {
     try {
-      const questions = await questionRepository.getAll();
+      const response = await fetch("/api/questions");
+      if (!response.ok) {
+        throw new Error("Failed to fetch questions");
+      }
+      const data = await response.json();
+      const questions = data.questions;
+
       const jsonStr = JSON.stringify(questions, null, 2);
       const blob = new Blob([jsonStr], { type: "application/json" });
       const url = URL.createObjectURL(blob);

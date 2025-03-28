@@ -1,6 +1,7 @@
 // app/api/quizzes/[quizId]/complete/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { quizRepository } from "@/lib/db/repositories/quiz.repository";
+import { debug } from "@/lib/debug";
+import { QuizService } from "@/lib/services/quiz.service";
 
 export async function POST(
   request: NextRequest,
@@ -8,7 +9,9 @@ export async function POST(
 ) {
   try {
     const { quizId } = await params;
-    const quiz = await quizRepository.getById(quizId);
+
+    const quizService = new QuizService();
+    const quiz = await quizService.getQuizById(quizId);
 
     if (!quiz) {
       return NextResponse.json({ error: "Quiz not found" }, { status: 404 });
@@ -24,23 +27,26 @@ export async function POST(
     // Calculate score
     const totalQuestions = quiz.questions.length;
     const correctAnswers = quiz.questions.filter((q) => q.isCorrect).length;
-    const scorePercentage = Math.round((correctAnswers / totalQuestions) * 100);
+    const score = quizService.calculateScore(correctAnswers, totalQuestions);
 
     // Complete the quiz
-    await quizRepository.completeQuiz(quiz.id, scorePercentage, []);
+    await quizService.completeQuiz(quiz.id, correctAnswers, totalQuestions, []);
 
     return NextResponse.json({
       quizId: quiz.id,
       totalQuestions,
       correctAnswers,
-      score: scorePercentage,
-      passed: scorePercentage >= quiz.passPercentage,
+      score,
+      passed: score >= quiz.passPercentage,
       topicPerformance: [], // Empty array for now since we don't have the data
     });
   } catch (error) {
-    console.error("Error completing quiz:", error);
+    debug.error("Error completing quiz:", error);
     return NextResponse.json(
-      { error: "Failed to complete quiz" },
+      {
+        error:
+          error instanceof Error ? error.message : "Failed to complete quiz",
+      },
       { status: 500 }
     );
   }

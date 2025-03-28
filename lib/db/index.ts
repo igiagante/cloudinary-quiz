@@ -5,6 +5,11 @@ import * as schema from "./schema";
 // Determine if we're in a browser environment
 const isBrowser = typeof window !== "undefined";
 
+// Determine if we're in a build process
+const isBuildProcess = Boolean(
+  process.env.NEXT_PHASE && process.env.NEXT_PHASE.includes("build")
+);
+
 // Type for the global postgres connection
 interface GlobalPostgres {
   postgres: postgres.Sql | undefined;
@@ -18,11 +23,13 @@ const globalForPostgres = globalThis as unknown as GlobalPostgres;
  * Create a postgres connection with proper error handling
  */
 const createPostgresConnection = () => {
-  // Don't attempt to create a connection in the browser
-  if (isBrowser) {
-    console.warn(
-      "Postgres connection attempted in browser environment. This is not supported."
-    );
+  // Don't create connections during build process or in the browser
+  if (isBrowser || isBuildProcess) {
+    if (isBrowser) {
+      console.warn(
+        "Postgres connection attempted in browser environment. This is not supported."
+      );
+    }
     return null;
   }
 
@@ -53,21 +60,24 @@ const createPostgresConnection = () => {
 
   try {
     if (!globalForPostgres.postgres) {
-      console.log("Creating new Postgres connection...");
       const client = postgres(process.env.POSTGRES_URL, connectionConfig);
 
       // Add a cleanup function
       globalForPostgres.cleanup = async () => {
         await client.end();
         globalForPostgres.postgres = undefined;
-        console.log("Database connection closed");
+        if (process.env.NODE_ENV === "development") {
+          console.log("Database connection closed");
+        }
       };
 
       // Test the connection with retry logic
       const testConnection = async (retries = 3, delay = 5000) => {
         try {
           await client.unsafe(`SELECT 1`);
-          console.log("✓ Database connection established");
+          if (process.env.NODE_ENV === "development") {
+            console.log("✓ Database connection established");
+          }
           return true;
         } catch (error) {
           console.error(
@@ -76,7 +86,9 @@ const createPostgresConnection = () => {
           );
 
           if (retries > 1) {
-            console.log(`Retrying in ${delay / 1000} seconds...`);
+            if (process.env.NODE_ENV === "development") {
+              console.log(`Retrying in ${delay / 1000} seconds...`);
+            }
             await new Promise((resolve) => setTimeout(resolve, delay));
             return testConnection(retries - 1, delay);
           }
@@ -107,14 +119,50 @@ const client = createPostgresConnection();
 type MockDB = {
   query: {
     questions: {
-      findMany: () => Promise<any[]>;
-      findFirst: () => Promise<any | null>;
+      findMany: (opts?: any) => Promise<any[]>;
+      findFirst: (opts?: any) => Promise<any | null>;
+    };
+    users: {
+      findMany: (opts?: any) => Promise<any[]>;
+      findFirst: (opts?: any) => Promise<any | null>;
+    };
+    quizzes: {
+      findMany: (opts?: any) => Promise<any[]>;
+      findFirst: (opts?: any) => Promise<any | null>;
+    };
+    options: {
+      findMany: (opts?: any) => Promise<any[]>;
+      findFirst: (opts?: any) => Promise<any | null>;
+    };
+    topicPerformance: {
+      findMany: (opts?: any) => Promise<any[]>;
+      findFirst: (opts?: any) => Promise<any | null>;
+    };
+    quizQuestions: {
+      findMany: (opts?: any) => Promise<any[]>;
+      findFirst: (opts?: any) => Promise<any | null>;
+    };
+    userTopicPerformance: {
+      findMany: (opts?: any) => Promise<any[]>;
+      findFirst: (opts?: any) => Promise<any | null>;
     };
   };
-  select: () => { from: () => { where?: () => any; groupBy: () => any[] } };
-  delete: () => { where: () => { returning: () => any[] } };
-  insert: () => { values: () => { returning: () => any[] } };
-  update: () => { set: () => { where: () => { returning: () => any[] } } };
+  select: (columns?: any) => {
+    from: (table: any) => {
+      where: (condition?: any) => any;
+      limit: (n: number) => any;
+      groupBy: (columns?: any) => any[];
+    };
+  };
+  delete: () => { where: (condition?: any) => { returning: () => any[] } };
+  insert: (table?: any) => {
+    values: (data?: any) => { returning: () => any[] };
+  };
+  update: (table?: any) => {
+    set: (data?: any) => {
+      where: (condition?: any) => { returning: () => any[] };
+    };
+  };
   transaction: <T>(fn: (tx: MockDB) => Promise<T>) => Promise<T>;
 };
 
@@ -122,16 +170,32 @@ type MockDB = {
  * Create a mock DB implementation for browser environments
  */
 const createMockDB = (): MockDB => {
-  console.info("Using mock database in browser environment");
+  if (process.env.NODE_ENV === "development") {
+    console.info("Using mock database in browser environment");
+  }
+
+  const emptyQueryFn = {
+    findMany: async () => [],
+    findFirst: async () => null,
+  };
 
   const mockDB: MockDB = {
     query: {
-      questions: {
-        findMany: async () => [],
-        findFirst: async () => null,
-      },
+      questions: emptyQueryFn,
+      users: emptyQueryFn,
+      quizzes: emptyQueryFn,
+      options: emptyQueryFn,
+      topicPerformance: emptyQueryFn,
+      quizQuestions: emptyQueryFn,
+      userTopicPerformance: emptyQueryFn,
     },
-    select: () => ({ from: () => ({ groupBy: () => [] }) }),
+    select: (columns?: any) => ({
+      from: () => ({
+        where: () => ({ limit: () => [] }),
+        limit: () => [],
+        groupBy: () => [],
+      }),
+    }),
     delete: () => ({ where: () => ({ returning: () => [] }) }),
     insert: () => ({ values: () => ({ returning: () => [] }) }),
     update: () => ({ set: () => ({ where: () => ({ returning: () => [] }) }) }),
@@ -153,7 +217,9 @@ export const closeConnection = async (): Promise<void> => {
 // For development/testing: register a shutdown handler
 if (process.env.NODE_ENV !== "production" && !isBrowser) {
   process.on("SIGINT", async () => {
-    console.log("Closing database connections before exit...");
+    if (process.env.NODE_ENV === "development") {
+      console.log("Closing database connections before exit...");
+    }
     await closeConnection();
     process.exit(0);
   });

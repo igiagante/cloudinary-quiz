@@ -5,9 +5,9 @@ import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { cloudinaryTopicList } from "@/types/constants";
 import { Topic } from "@/types";
-import { questionRepository } from "@/lib/db/repositories/question.repository";
 import AdminLink from "@/components/admin-link";
 import { v4 as uuidv4 } from "uuid";
+import { debug } from "@/lib/debug";
 
 export default function Home() {
   const router = useRouter();
@@ -40,14 +40,14 @@ export default function Home() {
         ) {
           // Auto-clear unfinished quizzes to prevent state issues
           localStorage.removeItem("quizState");
-          console.log("Cleared unfinished quiz state on home page load");
+          debug.log("Cleared unfinished quiz state on home page load");
 
           // No need to remove quizId as it will be reused
         }
       } catch (e) {
         // If there's any error parsing, clear it
         localStorage.removeItem("quizState");
-        console.error("Error parsing quiz state, cleared it:", e);
+        debug.error("Error parsing quiz state, cleared it:", e);
       }
     }
   }, []);
@@ -62,7 +62,7 @@ export default function Home() {
         const data = await response.json();
         setDbStats({ totalQuestions: data.totalQuestions });
       } catch (error) {
-        console.error("Error fetching stats:", error);
+        debug.error("Error fetching stats:", error);
         setDbStats({ totalQuestions: 0 });
       }
     };
@@ -105,7 +105,7 @@ export default function Home() {
 
     try {
       // Replace with your actual user ID from the database
-      const existingUserId = "aba9c6b9-6ee2-4e5a-a0ce-0e069907407c";
+      const existingUserId = "a77c7b9b-aa9d-4f90-b70a-ab74206a7d8e";
       localStorage.setItem("userId", existingUserId);
 
       // Save quiz settings to localStorage
@@ -141,7 +141,7 @@ export default function Home() {
         maxNewQuestions,
       };
 
-      console.log("Sending request with body:", JSON.stringify(requestBody));
+      debug.log("Sending request with body:", JSON.stringify(requestBody));
 
       const response = await fetch("/api/generate-questions", {
         method: "POST",
@@ -170,12 +170,12 @@ export default function Home() {
         updateProgress(
           "Warning: No questions were generated. Please try again."
         );
-        console.error("No questions generated:", data);
+        debug.error("No questions generated:", data);
         throw new Error("No questions were generated");
       }
 
       // Log the structure of the first question to debug any issues
-      console.log(
+      debug.log(
         "First question structure:",
         JSON.stringify(questions[0], null, 2)
       );
@@ -189,11 +189,11 @@ export default function Home() {
         updateProgress(
           "Warning: Questions were generated but appear to be missing options."
         );
-        console.error("Question missing options:", questions[0]);
+        debug.error("Question missing options:", questions[0]);
       }
 
       // After the first question structure console log, add this:
-      console.log(
+      debug.log(
         "Question IDs being sent to create quiz:",
         JSON.stringify(
           questions.map((q: { id: string }) => q.id),
@@ -202,7 +202,7 @@ export default function Home() {
         )
       );
 
-      console.log(
+      debug.log(
         "Question IDs format from API:",
         questions.map((q: { id: string }) => q.id)
       );
@@ -225,7 +225,7 @@ export default function Home() {
 
       if (!createQuizResponse.ok) {
         const errorData = await createQuizResponse.json();
-        console.error("Failed to create quiz in database:", errorData);
+        debug.error("Failed to create quiz in database:", errorData);
         updateProgress(
           "Warning: Failed to save quiz to database. Continuing anyway..."
         );
@@ -250,16 +250,16 @@ export default function Home() {
       };
 
       // Debug multiple-answer questions
-      console.log("Quiz state being stored:", JSON.stringify(quizState));
+      debug.log("Quiz state being stored:", JSON.stringify(quizState));
       const multipleAnswerQuestions = questions.filter(
         (q: any) => q.hasMultipleCorrectAnswers
       );
-      console.log(
+      debug.log(
         `Found ${multipleAnswerQuestions.length} multiple-answer questions`
       );
       if (multipleAnswerQuestions.length > 0) {
         multipleAnswerQuestions.forEach((q: any, i: number) => {
-          console.log(`Multiple answer Q${i + 1}:`, {
+          debug.log(`Multiple answer Q${i + 1}:`, {
             question: q.question.substring(0, 50) + "...",
             hasFlag: q.hasMultipleCorrectAnswers,
             correctAnswers: q.correctAnswers,
@@ -274,7 +274,7 @@ export default function Home() {
       // Navigate to the quiz page
       router.push("/quiz");
     } catch (error) {
-      console.error("Error generating quiz:", error);
+      debug.error("Error generating quiz:", error);
       updateProgress(
         `Error: ${
           error instanceof Error ? error.message : "Something went wrong"

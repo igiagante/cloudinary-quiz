@@ -261,7 +261,6 @@ export default function ResultsPage() {
         }
 
         const data = await response.json();
-        console.log("Quiz results API response:", data);
 
         // Ensure we have topic scores in some form
         if (!data) {

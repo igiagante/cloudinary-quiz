@@ -1,4 +1,3 @@
-// @ts-nocheck
 // TODO: Refactor this file to properly define types for Drizzle ORM queries
 // - Update Drizzle ORM to latest version
 // - Define proper relations in schema (one-to-many between quiz and questions)
@@ -201,7 +200,7 @@ export const quizRepository = {
         return {
           questionId: qq.questionId,
           question: {
-            id: qq.question.id,
+            id: parseInt(qq.question.id) || 0,
             question: qq.question.question,
             explanation: qq.question.explanation,
             topic: qq.question.topic,
@@ -285,25 +284,7 @@ export const quizRepository = {
       percentage: number;
     }>
   ): Promise<void> {
-    console.log(`\n===== COMPLETING QUIZ ${quizId} WITH SCORE ${score} =====`);
-    console.log(
-      `Topic performance data received: ${topicPerformanceData.length} topics`
-    );
-
-    console.log("Raw topic data:");
-    topicPerformanceData.forEach((tp, index) => {
-      console.log(
-        `[${index + 1}] Topic: "${
-          tp.topic
-        }", Type: ${typeof tp.topic}, Score: ${tp.correct}/${tp.total} (${
-          tp.percentage
-        }%)`
-      );
-    });
-
     await db.transaction(async (tx) => {
-      console.log(`Updating quiz ${quizId} as completed with score ${score}`);
-
       await tx
         .update(quizzes)
         .set({
@@ -313,65 +294,31 @@ export const quizRepository = {
         })
         .where(eq(quizzes.id, quizId));
 
-      console.log(`\n===== SAVING INDIVIDUAL TOPIC PERFORMANCE RECORDS =====`);
-      let successCount = 0;
-      let errorCount = 0;
+      // Save topic performance data
+      const validTopics = [
+        "Products",
+        "Architecture",
+        "Lifecycle",
+        "Widgets",
+        "Assets",
+        "Transformations",
+        "Management",
+        "Access",
+      ];
 
+      // Insert valid topic performance records
       for (const tp of topicPerformanceData) {
-        console.log(
-          `Saving topic performance: "${tp.topic}", Score: ${tp.correct}/${tp.total} (${tp.percentage}%)`
-        );
-
-        try {
-          // Check if the topic is a valid enum value
-          const validTopics = [
-            "Products",
-            "Architecture",
-            "Lifecycle",
-            "Widgets",
-            "Assets",
-            "Transformations",
-            "Management",
-            "Access",
-          ];
-
-          if (!validTopics.includes(tp.topic)) {
-            console.error(
-              `ERROR: "${
-                tp.topic
-              }" is not in the list of valid topics: ${validTopics.join(", ")}`
-            );
-          }
-
+        if (validTopics.includes(tp.topic)) {
           await tx.insert(topicPerformance).values({
             quizId,
-            topic: tp.topic as any, // The topic should already be properly mapped at this point
+            topic: tp.topic as any,
             correct: tp.correct,
             total: tp.total,
             percentage: tp.percentage,
             createdAt: new Date(),
           });
-          console.log(
-            `✅ Successfully saved topic performance for "${tp.topic}"`
-          );
-          successCount++;
-        } catch (error) {
-          console.error(
-            `❌ Failed to save topic performance for "${tp.topic}":`,
-            error
-          );
-          errorCount++;
-          // Continue with other topics even if one fails
         }
       }
-
-      console.log(`
-===== TOPIC PERFORMANCE SUMMARY =====
-Successfully saved: ${successCount}/${topicPerformanceData.length} topics
-Errors: ${errorCount}/${topicPerformanceData.length} topics
-Quiz ${quizId} completed with score ${score}
-=====================================
-      `);
     });
   },
 
@@ -467,17 +414,8 @@ Quiz ${quizId} completed with score ${score}
     userAnswer: number | null,
     isCorrect: boolean
   ): Promise<void> {
-    console.log(
-      `Saving answer for quiz ${quizId}, question ID ${questionId}:`,
-      {
-        userAnswer: userAnswer === null ? "NULL" : userAnswer,
-        isCorrect,
-      }
-    );
-
     try {
       // First, find the quiz_question record using the question's ID
-      // We need to get the question's internal ID from the database
       const questionRecords = await db.query.questions.findMany({
         where: eq(questions.id, questionId),
         columns: {
@@ -486,14 +424,10 @@ Quiz ${quizId} completed with score ${score}
       });
 
       if (!questionRecords || questionRecords.length === 0) {
-        console.error(`Could not find question with ID ${questionId}`);
         throw new Error(`Question with ID ${questionId} not found`);
       }
 
       const questionInternalId = questionRecords[0].id;
-      console.log(
-        `Found question ID ${questionInternalId} for ID ${questionId}`
-      );
 
       // Safely convert user answer to number or null
       let finalUserAnswer: number | null = null;
@@ -507,28 +441,16 @@ Quiz ${quizId} completed with score ${score}
             if (!isNaN(parsed) && parsed > 0) {
               finalUserAnswer = parsed;
             } else {
-              console.warn(
-                `Invalid user answer format: ${userAnswer}, storing as NULL`
-              );
               finalUserAnswer = null;
             }
           }
         } catch (e) {
-          console.warn(
-            `Error converting user answer to number: ${userAnswer}`,
-            e
-          );
+          // Conversion failed, keep as null
         }
       }
 
-      console.log(
-        `Final answer value to save: ${
-          finalUserAnswer === null ? "NULL" : finalUserAnswer
-        }`
-      );
-
-      // Now update the quiz_questions record using the internal question ID
-      const result = await db
+      // Update the quiz_questions record using the internal question ID
+      await db
         .update(quizQuestions)
         .set({
           userAnswer: finalUserAnswer,
@@ -539,20 +461,7 @@ Quiz ${quizId} completed with score ${score}
             eq(quizQuestions.quizId, quizId),
             eq(quizQuestions.questionId, questionInternalId)
           )
-        )
-        .returning();
-
-      console.log(`Update result: ${result.length} rows affected`);
-
-      if (result.length === 0) {
-        console.warn(
-          `No quiz_questions record found for quiz ${quizId} and question ${questionId}`
         );
-      } else {
-        console.log(
-          `Successfully saved answer for question ${questionId}, isCorrect: ${isCorrect}`
-        );
-      }
     } catch (error) {
       console.error(`Error saving answer for question ${questionId}:`, error);
       throw error;
@@ -714,5 +623,23 @@ Quiz ${quizId} completed with score ${score}
       passed:
         quiz.score !== null ? quiz.score >= quiz.passPercentage : undefined,
     }));
+  },
+
+  /**
+   * Get an option by its ID
+   */
+  async getOptionById(optionId: number): Promise<OptionResult | null> {
+    try {
+      const result = await db
+        .select()
+        .from(options)
+        .where(eq(options.id, optionId))
+        .limit(1);
+
+      return result.length > 0 ? result[0] : null;
+    } catch (error) {
+      console.error(`Error fetching option with ID ${optionId}:`, error);
+      return null;
+    }
   },
 };
